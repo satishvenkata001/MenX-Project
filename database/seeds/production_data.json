@@ -1,0 +1,332 @@
+{
+  "stores": [
+    {
+      "code": "TALAPUDI-01",
+      "name": "MenX Talapudi Retail Store",
+      "type": "PHYSICAL_STORE",
+      "address_line1": "Main Road, Talapudi",
+      "city": "Talapudi",
+      "state": "Andhra Pradesh",
+      "postal_code": "534341",
+      "phone": "+91 9900992222",
+      "is_active": true
+    },
+    {
+      "code": "ONLINE-01",
+      "name": "MenX Online Fulfillment Center",
+      "type": "ONLINE_FULFILLMENT",
+      "address_line1": "Fulfillment Warehouse Zone A",
+      "city": "Talapudi",
+      "state": "Andhra Pradesh",
+      "postal_code": "534341",
+      "phone": "+91 9900993333",
+      "is_active": true
+    }
+  ],
+  "brands": [
+    {
+      "name": "MenX Sartorial",
+      "slug": "menx-sartorial"
+    },
+    {
+      "name": "Lux Classics",
+      "slug": "lux-classics"
+    },
+    {
+      "name": "AeroFit Sport",
+      "slug": "aerofit-sport"
+    }
+  ],
+  "categories": [
+    {
+      "name": "Apparel",
+      "slug": "apparel",
+      "display_order": 1,
+      "subcategories": [
+        {
+          "name": "Shirts",
+          "slug": "apparel-shirts",
+          "display_order": 1
+        },
+        {
+          "name": "Trousers",
+          "slug": "apparel-trousers",
+          "display_order": 2
+        },
+        {
+          "name": "Activewear",
+          "slug": "apparel-activewear",
+          "display_order": 3
+        }
+      ]
+    },
+    {
+      "name": "Footwear",
+      "slug": "footwear",
+      "display_order": 2,
+      "subcategories": [
+        {
+          "name": "Formal",
+          "slug": "footwear-formal",
+          "display_order": 1
+        },
+        {
+          "name": "Sneakers",
+          "slug": "footwear-sneakers",
+          "display_order": 2
+        }
+      ]
+    }
+  ],
+  "sizes": [
+    {
+      "name": "S",
+      "category_type": "APPAREL",
+      "sort_order": 1
+    },
+    {
+      "name": "M",
+      "category_type": "APPAREL",
+      "sort_order": 2
+    },
+    {
+      "name": "L",
+      "category_type": "APPAREL",
+      "sort_order": 3
+    },
+    {
+      "name": "XL",
+      "category_type": "APPAREL",
+      "sort_order": 4
+    },
+    {
+      "name": "XXL",
+      "category_type": "APPAREL",
+      "sort_order": 5
+    },
+    {
+      "name": "8",
+      "category_type": "FOOTWEAR",
+      "sort_order": 1
+    },
+    {
+      "name": "9",
+      "category_type": "FOOTWEAR",
+      "sort_order": 2
+    },
+    {
+      "name": "10",
+      "category_type": "FOOTWEAR",
+      "sort_order": 3
+    },
+    {
+      "name": "11",
+      "category_type": "FOOTWEAR",
+      "sort_order": 4
+    }
+  ],
+  "colors": [
+    {
+      "name": "Navy Blue",
+      "hex_code": "#000080"
+    },
+    {
+      "name": "Charcoal Black",
+      "hex_code": "#36454F"
+    },
+    {
+      "name": "Crisp White",
+      "hex_code": "#FFFFFF"
+    },
+    {
+      "name": "Crimson Red",
+      "hex_code": "#DC143C"
+    },
+    {
+      "name": "Olive Green",
+      "hex_code": "#808000"
+    }
+  ],
+  "suppliers": [
+    {
+      "name": "Apex Textiles Ltd.",
+      "contact_name": "Sanjay Kumar",
+      "email": "contact@apextextiles.com",
+      "phone": "+91 9876543210",
+      "is_active": true
+    },
+    {
+      "name": "Regal Leather Works",
+      "contact_name": "Rohan Shah",
+      "email": "info@regalleather.com",
+      "phone": "+91 9876543211",
+      "is_active": true
+    }
+  ],
+  "delivery_zones": [
+    {
+      "name": "Talapudi Local Delivery",
+      "pincode_pattern": "534341",
+      "base_delivery_charge": 30.00,
+      "free_delivery_threshold": 300.00,
+      "estimated_days_min": 1,
+      "estimated_days_max": 2,
+      "is_active": true
+    },
+    {
+      "name": "Andhra Pradesh State",
+      "pincode_pattern": "53*",
+      "base_delivery_charge": 50.00,
+      "free_delivery_threshold": 500.00,
+      "estimated_days_min": 2,
+      "estimated_days_max": 4,
+      "is_active": true
+    },
+    {
+      "name": "India Domestic Default",
+      "pincode_pattern": "*",
+      "base_delivery_charge": 100.00,
+      "free_delivery_threshold": 1000.00,
+      "estimated_days_min": 3,
+      "estimated_days_max": 7,
+      "is_active": true
+    }
+  ],
+  "products": [
+    {
+      "title": "Signature Oxford Cotton Shirt",
+      "slug": "signature-oxford-cotton-shirt",
+      "description": "Premium long-staple cotton Oxford shirt.",
+      "status": "PUBLISHED",
+      "base_mrp": 1499.00,
+      "base_price": 1199.00,
+      "brand_name": "MenX Sartorial",
+      "category_slug": "apparel",
+      "subcategory_slug": "apparel-shirts",
+      "variants": [
+        {
+          "sku": "OXFORD-NAVY-M",
+          "barcode": "BAR-OXF-NV-M",
+          "size_name": "M",
+          "color_name": "Navy Blue",
+          "mrp": 1499.00,
+          "selling_price": 1199.00,
+          "inventory": {
+            "ONLINE-01": 100,
+            "TALAPUDI-01": 15
+          }
+        },
+        {
+          "sku": "OXFORD-NAVY-L",
+          "barcode": "BAR-OXF-NV-L",
+          "size_name": "L",
+          "color_name": "Navy Blue",
+          "mrp": 1499.00,
+          "selling_price": 1199.00,
+          "inventory": {
+            "ONLINE-01": 100,
+            "TALAPUDI-01": 15
+          }
+        },
+        {
+          "sku": "OXFORD-WHITE-M",
+          "barcode": "BAR-OXF-WT-M",
+          "size_name": "M",
+          "color_name": "Crisp White",
+          "mrp": 1499.00,
+          "selling_price": 1199.00,
+          "inventory": {
+            "ONLINE-01": 100,
+            "TALAPUDI-01": 15
+          }
+        },
+        {
+          "sku": "OXFORD-WHITE-L",
+          "barcode": "BAR-OXF-WT-L",
+          "size_name": "L",
+          "color_name": "Crisp White",
+          "mrp": 1499.00,
+          "selling_price": 1199.00,
+          "inventory": {
+            "ONLINE-01": 100,
+            "TALAPUDI-01": 15
+          }
+        }
+      ]
+    },
+    {
+      "title": "Premium Leather Chelsea Boots",
+      "slug": "premium-leather-chelsea-boots",
+      "description": "Handcrafted full-grain leather Chelsea boots.",
+      "status": "PUBLISHED",
+      "base_mrp": 3999.00,
+      "base_price": 3199.00,
+      "brand_name": "Lux Classics",
+      "category_slug": "footwear",
+      "subcategory_slug": "footwear-formal",
+      "variants": [
+        {
+          "sku": "CHELSEA-BLACK-9",
+          "barcode": "BAR-CHE-BK-9",
+          "size_name": "9",
+          "color_name": "Charcoal Black",
+          "mrp": 3999.00,
+          "selling_price": 3199.00,
+          "inventory": {
+            "ONLINE-01": 50,
+            "TALAPUDI-01": 10
+          }
+        },
+        {
+          "sku": "CHELSEA-BLACK-10",
+          "barcode": "BAR-CHE-BK-10",
+          "size_name": "10",
+          "color_name": "Charcoal Black",
+          "mrp": 3999.00,
+          "selling_price": 3199.00,
+          "inventory": {
+            "ONLINE-01": 50,
+            "TALAPUDI-01": 10
+          }
+        }
+      ]
+    },
+    {
+      "title": "AeroFit Tech Dry T-Shirt",
+      "slug": "aerofit-tech-dry-t-shirt",
+      "description": "High-performance moisture-wicking athletic tee.",
+      "status": "PUBLISHED",
+      "base_mrp": 999.00,
+      "base_price": 799.00,
+      "brand_name": "AeroFit Sport",
+      "category_slug": "apparel",
+      "subcategory_slug": "apparel-activewear",
+      "variants": [
+        {
+          "sku": "AEROFIT-RED-M",
+          "barcode": "BAR-AER-RD-M",
+          "size_name": "M",
+          "color_name": "Crimson Red",
+          "mrp": 999.00,
+          "selling_price": 799.00,
+          "inventory": {
+            "ONLINE-01": 80,
+            "TALAPUDI-01": 12
+          }
+        },
+        {
+          "sku": "AEROFIT-RED-L",
+          "barcode": "BAR-AER-RD-L",
+          "size_name": "L",
+          "color_name": "Crimson Red",
+          "mrp": 999.00,
+          "selling_price": 799.00,
+          "inventory": {
+            "ONLINE-01": 80,
+            "TALAPUDI-01": 12
+          }
+        }
+      ]
+    }
+  ]
+}

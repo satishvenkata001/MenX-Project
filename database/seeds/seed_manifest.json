@@ -1,0 +1,118 @@
+{
+  "created": {
+    "stock_movements": [
+      "0eced8c4-b26a-42b7-be00-49528acee7b6",
+      "1df7b96a-5826-49d4-b7da-d68fb4608662",
+      "a5441d75-372a-4b2a-9f67-e00353532d95",
+      "695fd6a2-1874-4cd1-afd8-f4ee426d3d69",
+      "489404aa-f809-42d0-824a-e2f36701d41c",
+      "107b0af3-4bd9-4e09-96e3-e2dfe7d2e52c",
+      "63bcc7be-007c-4014-a33c-f403cdcd6e6c",
+      "f0694b75-ba94-4b78-8b63-782eaa971dc3",
+      "33ab3ea2-957d-426c-903f-6570ddccfe1d",
+      "5bdc9b96-b1f2-4b90-ab0c-cd45d769941c",
+      "6343c39d-c247-4c50-9ba6-5f955bc09a0c",
+      "42f18677-465f-4dc6-b373-2703a048fab0",
+      "b2c91dd2-379b-4e79-9a79-b0874013db7b",
+      "8d51c1f3-8e7f-483c-9348-3c4c2e6c2e44",
+      "0aa90844-9a08-4a2d-8298-711b869fd11c",
+      "7b886aec-5abe-45b5-8d2b-8cbc60efe7e3"
+    ],
+    "inventory_items": [
+      "cc2be135-f430-4e98-932a-521cabba642c",
+      "5b1aeefc-ee23-4c92-af75-fd1cd5f6103e",
+      "081db486-48a1-4c42-b422-7208b8027c21",
+      "203f128c-b6ed-485f-82cf-776fae8e9b9e",
+      "0235b65a-4916-4276-a0e2-3f4a4a357c8f",
+      "6aa6e472-85e6-47b3-a0a7-8be08b7d2ecd",
+      "080fbfef-1076-4977-bd3e-ad3e50db6233",
+      "8b7ed048-1953-443a-8dd1-9612987700bf",
+      "72babc91-8b3a-4214-99b7-4c3a2cee3c33",
+      "488da963-f5aa-41b5-9172-ca39751844e0",
+      "fa415ff8-0536-44bb-ac6e-e03f874d3a38",
+      "7e2a3ffc-7122-4a91-a6a1-c8ca235a85f6",
+      "637c1b59-a620-4ccd-8fab-ed5ddd1e2971",
+      "e6f3d87d-d7b0-43b9-a056-43c2589343c3",
+      "35b7d084-ae42-40ea-a6e1-1bc06e2e8496",
+      "6d9a3042-1d71-47dd-8af8-0f48850966cf"
+    ],
+    "product_images": [],
+    "product_variants": [],
+    "products": [],
+    "colors": [],
+    "sizes": [],
+    "brands": [],
+    "subcategories": [],
+    "categories": [],
+    "suppliers": [],
+    "stores": [],
+    "delivery_zones": []
+  },
+  "existing": {
+    "stock_movements": [],
+    "inventory_items": [],
+    "product_images": [],
+    "product_variants": [
+      "0f0303e9-c1f2-4058-8e01-96cd805c8dc1",
+      "5ad34960-5bdf-4112-8f8c-512bed265b74",
+      "c46f1ffe-e515-48d7-9020-099562f471e8",
+      "8a69351c-a6e9-41cb-9245-c912956d16cd",
+      "2518de56-48fc-4f7c-b481-b029e48f7039",
+      "7f7ddad1-3ab5-4917-8e62-c5126ebcae9b",
+      "0e65e3b1-d6e3-40c0-a2a6-20bedb1c92b4",
+      "1a05d3dd-55e8-4bec-a124-40aca18c94b6"
+    ],
+    "products": [
+      "09294809-fa89-49ca-907e-349152d80993",
+      "a82482a8-0f39-40ef-8ff9-37686d874259",
+      "f7f35b0a-81ab-4158-9188-30e918c77033"
+    ],
+    "colors": [
+      "73bfb5a6-071b-4dc2-aa39-aa94607fdd73",
+      "32307c95-d924-40f8-a6d9-77aca93ee990",
+      "82ade004-91fb-4135-a93b-7385f97642c0",
+      "f422968e-5d54-4ee1-8ee0-f7cf581f5ac9",
+      "ef8038af-1c9c-4311-83f7-9a388b24d2fd"
+    ],
+    "sizes": [
+      "d74d596b-d99d-485e-b735-5d9371310b76",
+      "cc4d53dc-573e-4075-8d1d-1db852afd888",
+      "e08b9eee-7b95-4414-be20-3a1963999df0",
+      "98c20009-486f-4471-b539-0435ddcd4963",
+      "b5f1b86c-4968-4ce8-bdcc-0419ddb24509",
+      "ee0136ae-58e7-4456-acc2-29972593f2ba",
+      "faf6a686-b3d4-4bf1-97ef-382a137843ba",
+      "f3f73fd0-6a42-431d-bb8e-467b8ad97076",
+      "33291d0f-c7f0-4809-a6de-2d35286e3b45"
+    ],
+    "brands": [
+      "613f8ddb-c471-4608-ace2-ced11ab9c7bc",
+      "618cb968-ea73-4375-b836-a80053028910",
+      "9781e17c-1071-4425-a4c0-ce7cc51ed999"
+    ],
+    "subcategories": [
+      "60810a05-eafe-434d-aed3-a1d6db99302d",
+      "ec0ddcc5-6c19-45a9-b9ef-29636b1124de",
+      "302ebc02-fad1-4728-a7bb-5fa44243eeee",
+      "3b0fdb76-5fbf-4abb-9fae-4f01c4dc5086",
+      "881c5ed3-a51b-49b2-b334-27b7a4c839ab"
+    ],
+    "categories": [
+      "d3591d7a-00fd-478a-b8b6-42269ce4908b",
+      "1e6a3082-5bc0-48a6-8d80-0ce4ce6869b5"
+    ],
+    "suppliers": [
+      "5487cfae-c409-4dff-85a2-30a0c5bf1091",
+      "5098c93a-64b9-4263-8d57-7b52fb7863c6"
+    ],
+    "stores": [
+      "cea486fc-55dd-4898-8a39-1b92f55851d8",
+      "e929fe72-cd13-4d3a-8961-ecf56a5406b4"
+    ],
+    "delivery_zones": [
+      "e2188a93-c5c6-4fc8-b714-47de098b599d",
+      "c66500cf-3f56-4bed-8190-4b941fb9fd5c",
+      "69cb2d1a-4de1-4f60-b6a4-29d4f70e8ce7"
+    ]
+  }
+}
