@@ -14,8 +14,8 @@ export function AuthProvider({ children }) {
       const token = api.getToken();
       if (token) {
         try {
-          const profile = await api.get('/auth/me');
-          setUser(profile);
+          const res = await api.get('/auth/me');
+          setUser(res.data);
         } catch (err) {
           console.error('Failed to load user profile on init:', err.message);
           api.setToken(null);
@@ -30,13 +30,14 @@ export function AuthProvider({ children }) {
     setError(null);
     setLoading(true);
     try {
-      const data = await api.post('/auth/login', { email, password });
-      api.setToken(data.accessToken);
+      const res = await api.post('/auth/login', { email, password });
+      const sessionData = res.data;
+      api.setToken(sessionData.session?.accessToken);
       
-      const profile = await api.get('/auth/me');
-      setUser(profile);
+      const profileRes = await api.get('/auth/me');
+      setUser(profileRes.data);
       setLoading(false);
-      return profile;
+      return profileRes.data;
     } catch (err) {
       setError(err.message);
       setLoading(false);

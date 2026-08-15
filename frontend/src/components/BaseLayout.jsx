@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useWishlist } from '../context/WishlistContext.jsx';
 import { Menu, X, User, ShoppingBag, Heart, LogOut, LayoutDashboard, Shield } from 'lucide-react';
 
 export default function BaseLayout({ children }) {
   const { user, logout, isAdminOrStaff, isAuthenticated } = useAuth();
+  const { wishlist } = useWishlist();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -30,8 +32,19 @@ export default function BaseLayout({ children }) {
             </div>
 
             {/* Navigation links - Desktop */}
-            <nav className="hidden md:flex space-x-8 text-sm font-medium text-gray-300">
+            <nav className="hidden md:flex space-x-8 items-center text-sm font-medium text-gray-300">
               <Link to="/" className="hover:text-amber-500 transition-colors duration-200">Shop</Link>
+              {isAuthenticated && (
+                <Link to="/wishlist" className="flex items-center space-x-1.5 hover:text-amber-500 transition-colors duration-200">
+                  <Heart className="w-4 h-4 text-red-500 fill-red-500" />
+                  <span>Wishlist</span>
+                  {wishlist.length > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {wishlist.length}
+                    </span>
+                  )}
+                </Link>
+              )}
               {isAdminOrStaff && (
                 <Link to="/admin" className="flex items-center space-x-1 hover:text-amber-500 transition-colors duration-200">
                   <LayoutDashboard className="w-4 h-4 text-amber-500" />
@@ -97,6 +110,21 @@ export default function BaseLayout({ children }) {
             >
               Shop
             </Link>
+            {isAuthenticated && (
+              <Link
+                to="/wishlist"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+              >
+                <Heart className="w-4 h-4 text-red-500 fill-red-500" />
+                <span>Wishlist</span>
+                {wishlist.length > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {wishlist.length}
+                  </span>
+                )}
+              </Link>
+            )}
             {isAdminOrStaff && (
               <Link
                 to="/admin"

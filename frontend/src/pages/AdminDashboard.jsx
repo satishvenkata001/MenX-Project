@@ -14,12 +14,12 @@ export default function AdminDashboard() {
     async function loadDashboardStats() {
       try {
         // Query stores and products to verify admin backend access
-        const [storesData, productsData] = await Promise.all([
-          api.get('/admin/stores'), // Wait, let's make sure /admin/stores is accessible, or just read stores/products
+        const [storesRes, productsRes] = await Promise.all([
+          api.get('/admin/stores'),
           api.get('/products')
         ]);
-        setStores(storesData || []);
-        setProductsCount(productsData?.length || 0);
+        setStores(storesRes.data || []);
+        setProductsCount(productsRes.data?.length || 0);
       } catch (err) {
         console.error('Failed to load admin metrics:', err.message);
       } finally {
