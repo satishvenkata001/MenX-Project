@@ -1,0 +1,202 @@
+{
+  "backupName": "legacy-supabase-prototype-backup",
+  "projectReference": "mcvzvgciqmcxqnxuvomw",
+  "exportedAt": "2026-08-12T15:27:24.654Z",
+  "totalTables": 19,
+  "totalRecords": 461,
+  "rowCountSummary": {
+    "inventory_locations": {
+      "status": "SUCCESS",
+      "count": 4
+    },
+    "categories": {
+      "status": "SUCCESS",
+      "count": 7
+    },
+    "products": {
+      "status": "SUCCESS",
+      "count": 16
+    },
+    "product_variants": {
+      "status": "SUCCESS",
+      "count": 46
+    },
+    "product_images": {
+      "status": "SUCCESS",
+      "count": 16
+    },
+    "coupons": {
+      "status": "SUCCESS",
+      "count": 4
+    },
+    "inventory": {
+      "status": "SUCCESS",
+      "count": 184
+    },
+    "inventory_movements": {
+      "status": "SUCCESS",
+      "count": 184
+    },
+    "profiles": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "addresses": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "orders": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "order_items": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "payments": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "carts": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "cart_items": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "wishlists": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "wishlist_items": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "product_reviews": {
+      "status": "SUCCESS",
+      "count": 0
+    },
+    "coupon_usage": {
+      "status": "SUCCESS",
+      "count": 0
+    }
+  },
+  "files": [
+    {
+      "fileName": "data.json",
+      "sizeBytes": 198165,
+      "sha256": "4490ae0053b9f718e3ae3cbf2c605012c14d305e90982eb8d0b518ecded55570"
+    },
+    {
+      "fileName": "data.sql",
+      "sizeBytes": 179974,
+      "sha256": "6beb9c2e989a7e6ba7e04433f3281a697c080c70b10de75c9e63f152aad2e970"
+    },
+    {
+      "fileName": "schema.json",
+      "sizeBytes": 155317,
+      "sha256": "c5fda248e889480dbf9548ea5c03e13a2ef6a62afc7a942807ddfc7ce2ad3b3d"
+    },
+    {
+      "fileName": "schema.sql",
+      "sizeBytes": 7672,
+      "sha256": "691360f7fb76ddf264c60e676670433155095bf52496c4b9fa8abb5d0b7aac80"
+    },
+    {
+      "fileName": "tables/addresses.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/carts.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/cart_items.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/categories.json",
+      "sizeBytes": 3303,
+      "sha256": "047ff40801434c90ccc9225ffba7b54dd2a1fb0043c57d4072bc92fdb1ad86d0"
+    },
+    {
+      "fileName": "tables/coupons.json",
+      "sizeBytes": 2164,
+      "sha256": "8671b6e67f95e15417cef762e1c7d48b8f624552f4be56b891e3b867f402db15"
+    },
+    {
+      "fileName": "tables/coupon_usage.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/inventory.json",
+      "sizeBytes": 65552,
+      "sha256": "e05f8f9b90d2fc0a62800caa0f01b0042605680245c25ca8ba7018a373339567"
+    },
+    {
+      "fileName": "tables/inventory_locations.json",
+      "sizeBytes": 1369,
+      "sha256": "8fb82a95e5eaf379575954dff41a24664806052ca9462fe02a3c0a1b5f17ff5f"
+    },
+    {
+      "fileName": "tables/inventory_movements.json",
+      "sizeBytes": 79168,
+      "sha256": "e5c65b313a1b1e67e6c107b61c0477813ccf8a4f07a90f1ea4abbd70f4612bc8"
+    },
+    {
+      "fileName": "tables/orders.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/order_items.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/payments.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/products.json",
+      "sizeBytes": 11073,
+      "sha256": "d0d453a8d31b26fbf75e00093fa690e74834756c94bf0c1317160e9c38325b8c"
+    },
+    {
+      "fileName": "tables/product_images.json",
+      "sizeBytes": 6502,
+      "sha256": "44788915dfdccae15c28dd375ad22f0706d24d09ff4b1c3431fbb8760c2bedba"
+    },
+    {
+      "fileName": "tables/product_reviews.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/product_variants.json",
+      "sizeBytes": 18509,
+      "sha256": "64a770c329f0e37422908c59c26fbcc4ee382eb76fc2b7e1d983bb4c731ca28f"
+    },
+    {
+      "fileName": "tables/profiles.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/wishlists.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "fileName": "tables/wishlist_items.json",
+      "sizeBytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-08-12T15:32:45Z",
+  "local_timestamp": "2026-08-12T21:02:45+05:30",
+  "authorization": "MENX PHASE 3G APPROVED",
+  "project_ref": "mcvzvgciqmcxqnxuvomw",
+  "backup_location": "backups/legacy-supabase/",
+  "backup_records": 461,
+  "backup_verified": true,
+  "migration_files": [
+    "supabase/migrations/20260812000000_cleanup_legacy_prototype.sql",
+    "supabase/migrations/20260812000001_001_initial_schema.sql"
+  ],
+  "authoritative_schema_checksum": "12ca4829187fda4a9a8a1c55ece81a8ac22fc5eec298636342c678e57514de1b",
+  "action": "EXECUTE_REPLACEMENT_MIGRATION"
+}

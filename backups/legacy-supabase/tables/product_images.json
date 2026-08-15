@@ -1,0 +1,162 @@
+[
+  {
+    "id": "3db95403-c7a6-4feb-b902-12274ff852a1",
+    "product_id": "33333333-3333-4333-8333-333333333301",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Heavyweight Boxy Fit Tee Front View",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "d810a8c9-1132-446f-8a81-0d13d56fe331",
+    "product_id": "33333333-3333-4333-8333-333333333302",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Acid Wash Graphic Tee Street Style",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "342e51e0-6743-4915-8738-dfd2de063b6f",
+    "product_id": "33333333-3333-4333-8333-333333333303",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Cyberpunk Anime Drop-Shoulder Tee Front",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "3c364dca-cc95-476a-9d07-e72f468d44e3",
+    "product_id": "33333333-3333-4333-8333-333333333304",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Cuban Collar Resort Shirt Olive",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "c9c84115-20ba-4a96-8750-8f40a9c73510",
+    "product_id": "33333333-3333-4333-8333-333333333305",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Corduroy Overshirt Rust Brown",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "7f4ddb3e-61ac-48de-8604-8c088a03eb22",
+    "product_id": "33333333-3333-4333-8333-333333333306",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Structured Linen Blend Shirt White",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "720e84d9-2501-4f78-addf-797fb0caf9dc",
+    "product_id": "33333333-3333-4333-8333-333333333307",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1542272604-780c96856592?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Baggy 90s Vintage Wash Denim Flat Lay",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "5916e590-819e-4969-83f4-b018b22607b9",
+    "product_id": "33333333-3333-4333-8333-333333333308",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Washed Black Carpenter Jeans",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "a44d152e-bbd3-413c-bc9a-b414516aa573",
+    "product_id": "33333333-3333-4333-8333-333333333309",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Street-Style Utility Cargo Joggers Grey",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "564a3022-8d29-4135-8323-0c956e60c545",
+    "product_id": "33333333-3333-4333-8333-333333333310",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Pleated Relaxed Trousers Charcoal",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "e356ad6f-6014-48c2-838f-f0ffe892995f",
+    "product_id": "33333333-3333-4333-8333-333333333311",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Core Heavy 380 GSM Hoodie Forest Green",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "e61ebfd4-64b2-4524-8bbe-1b0fd7d673a2",
+    "product_id": "33333333-3333-4333-8333-333333333312",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Minimalist French Terry Sweatshirt Oatmeal",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "dac69e26-07f4-4fba-b7c5-64168720f66f",
+    "product_id": "33333333-3333-4333-8333-333333333313",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Trucker Denim Jacket Classic Blue",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "b972c5e3-434d-4817-955d-43e900b9330e",
+    "product_id": "33333333-3333-4333-8333-333333333314",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Streetwear Puffer Jacket Matte Black",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "eb0dd47b-7cd0-4587-b119-4d39e788c836",
+    "product_id": "33333333-3333-4333-8333-333333333315",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Utility Crossbody Sling Bag Stealth Black",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "6e7e5a21-e2c4-44fe-a25a-11cec20d2989",
+    "product_id": "33333333-3333-4333-8333-333333333316",
+    "variant_id": null,
+    "image_url": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=800&q=80",
+    "alt_text": "Distressed Vintage Dad Cap Navy",
+    "sort_order": 1,
+    "is_primary": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00"
+  }
+]

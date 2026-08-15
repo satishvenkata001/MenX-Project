@@ -1,0 +1,38 @@
+[
+  {
+    "id": "11111111-1111-4111-8111-111111111101",
+    "name": "MENX Central Warehouse - Bhiwandi",
+    "type": "warehouse",
+    "address": "Plot 42, Logistics Park, Bhiwandi, Maharashtra 421302",
+    "is_active": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00",
+    "updated_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111102",
+    "name": "MENX Online Fulfillment Hub - Gurugram",
+    "type": "online",
+    "address": "Sector 37, Pace City II, Gurugram, Haryana 122001",
+    "is_active": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00",
+    "updated_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111103",
+    "name": "MENX Flagship Store - Connaught Place",
+    "type": "physical_store",
+    "address": "Block M, Inner Circle, Connaught Place, New Delhi 110001",
+    "is_active": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00",
+    "updated_at": "2026-08-10T15:04:01.437743+00:00"
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111104",
+    "name": "MENX Retail Store - Indiranagar",
+    "type": "physical_store",
+    "address": "100ft Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038",
+    "is_active": true,
+    "created_at": "2026-08-10T15:04:01.437743+00:00",
+    "updated_at": "2026-08-10T15:04:01.437743+00:00"
+  }
+]
