@@ -9,6 +9,7 @@ import wishlistRoutes from './wishlist.routes.js';
 import orderRoutes from './order.routes.js';
 import adminOrderRoutes from './adminOrder.routes.js';
 import returnRoutes from './return.routes.js';
+import addressRoutes from './address.routes.js';
 
 const apiRouter = Router();
 
@@ -17,6 +18,7 @@ apiRouter.use('/health', healthRoutes);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/cart', cartRoutes);
 apiRouter.use('/wishlist', wishlistRoutes);
+apiRouter.use('/addresses', addressRoutes);
 apiRouter.use('/admin', adminCatalogRoutes);
 apiRouter.use('/admin', inventoryRoutes);
 apiRouter.use('/', catalogRoutes);

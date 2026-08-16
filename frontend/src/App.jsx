@@ -8,6 +8,10 @@ import Login from './pages/Login.jsx';
 import ProductDetail from './pages/ProductDetail.jsx';
 import Wishlist from './pages/Wishlist.jsx';
 import Cart from './pages/Cart.jsx';
+import Checkout from './pages/Checkout.jsx';
+import OrderSuccess from './pages/OrderSuccess.jsx';
+import OrderHistory from './pages/OrderHistory.jsx';
+import OrderDetails from './pages/OrderDetails.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -31,6 +35,38 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Wishlist />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/checkout"
+                element={
+                  <ProtectedRoute>
+                    <Checkout />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/order-success"
+                element={
+                  <ProtectedRoute>
+                    <OrderSuccess />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders"
+                element={
+                  <ProtectedRoute>
+                    <OrderHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders/:orderId"
+                element={
+                  <ProtectedRoute>
+                    <OrderDetails />
                   </ProtectedRoute>
                 }
               />
