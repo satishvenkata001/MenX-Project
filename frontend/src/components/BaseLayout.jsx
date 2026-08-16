@@ -36,6 +36,12 @@ export default function BaseLayout({ children }) {
             {/* Navigation links - Desktop */}
             <nav className="hidden md:flex space-x-8 items-center text-sm font-medium text-gray-300">
               <Link to="/" className="hover:text-amber-500 transition-colors duration-200">Shop</Link>
+              {isAuthenticated && (
+                <>
+                  <Link to="/orders" className="hover:text-amber-500 transition-colors duration-200">Orders</Link>
+                  <Link to="/returns" className="hover:text-amber-500 transition-colors duration-200">Returns</Link>
+                </>
+              )}
               <Link to="/cart" className="flex items-center space-x-1.5 hover:text-amber-500 transition-colors duration-200">
                 <ShoppingBag className="w-4 h-4 text-amber-500" />
                 <span>Cart</span>
@@ -121,6 +127,24 @@ export default function BaseLayout({ children }) {
             >
               Shop
             </Link>
+            {isAuthenticated && (
+              <>
+                <Link
+                  to="/orders"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+                >
+                  Orders
+                </Link>
+                <Link
+                  to="/returns"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+                >
+                  Returns & Exchanges
+                </Link>
+              </>
+            )}
             <Link
               to="/cart"
               onClick={() => setMobileMenuOpen(false)}

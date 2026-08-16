@@ -12,6 +12,9 @@ import Checkout from './pages/Checkout.jsx';
 import OrderSuccess from './pages/OrderSuccess.jsx';
 import OrderHistory from './pages/OrderHistory.jsx';
 import OrderDetails from './pages/OrderDetails.jsx';
+import RequestReturn from './pages/RequestReturn.jsx';
+import ReturnHistory from './pages/ReturnHistory.jsx';
+import ReturnDetails from './pages/ReturnDetails.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -67,6 +70,30 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <OrderDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/returns/new"
+                element={
+                  <ProtectedRoute>
+                    <RequestReturn />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/returns"
+                element={
+                  <ProtectedRoute>
+                    <ReturnHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/returns/:returnId"
+                element={
+                  <ProtectedRoute>
+                    <ReturnDetails />
                   </ProtectedRoute>
                 }
               />

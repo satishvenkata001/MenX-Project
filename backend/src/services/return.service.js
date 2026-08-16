@@ -16,6 +16,7 @@ export class ReturnService {
         oi.id AS order_item_id,
         oi.order_id,
         oi.variant_id,
+        pv.product_id,
         oi.product_title_snapshot,
         oi.variant_sku_snapshot,
         oi.size_snapshot,
@@ -27,6 +28,7 @@ export class ReturnService {
         COALESCE(returned.qty, 0) AS returned_qty
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
+      JOIN product_variants pv ON pv.id = oi.variant_id
       JOIN (
         SELECT order_id, MAX(created_at) AS created_at
         FROM order_status_history
@@ -54,6 +56,7 @@ export class ReturnService {
         orderId: row.order_id,
         orderNumber: row.order_number,
         variantId: row.variant_id,
+        productId: row.product_id,
         productTitle: row.product_title_snapshot,
         sku: row.variant_sku_snapshot,
         size: row.size_snapshot,
@@ -323,9 +326,11 @@ export class ReturnService {
       // Get return items
       const itemsRes = await pool.query(
         `SELECT ri.id, ri.order_item_id, ri.variant_id, ri.quantity, ri.replacement_variant_id,
-                oi.product_title_snapshot, oi.variant_sku_snapshot, oi.size_snapshot, oi.color_snapshot
+                oi.product_title_snapshot, oi.variant_sku_snapshot, oi.size_snapshot, oi.color_snapshot,
+                rep.size AS replacement_size, rep.color AS replacement_color
          FROM return_items ri
          JOIN order_items oi ON oi.id = ri.order_item_id
+         LEFT JOIN product_variants rep ON rep.id = ri.replacement_variant_id
          WHERE ri.return_request_id = $1`,
         [returnId]
       );

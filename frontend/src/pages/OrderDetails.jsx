@@ -142,6 +142,15 @@ export default function OrderDetails() {
                   Cancel Order
                 </button>
               )}
+
+              {order.order_status === 'DELIVERED' && (
+                <Link
+                  to={`/returns/new?orderId=${order.id}`}
+                  className="py-2.5 px-5 bg-amber-500 hover:bg-amber-600 text-black rounded-xl text-xs font-bold transition-all duration-150 uppercase tracking-wider text-center"
+                >
+                  Return or Exchange Items
+                </Link>
+              )}
             </div>
 
             {/* Visual Status Timeline Progress Tracker */}
