@@ -36,6 +36,18 @@ export function AuthProvider({ children }) {
       
       const profileRes = await api.get('/auth/me');
       setUser(profileRes.data);
+
+      // Safe guest-to-authenticated cart merging
+      const guestToken = localStorage.getItem('menx_guest_token');
+      if (guestToken) {
+        try {
+          await api.post('/cart/merge', { guestToken });
+          localStorage.removeItem('menx_guest_token');
+        } catch (mergeErr) {
+          console.error('Failed to merge guest cart on login:', mergeErr.message);
+        }
+      }
+
       setLoading(false);
       return profileRes.data;
     } catch (err) {

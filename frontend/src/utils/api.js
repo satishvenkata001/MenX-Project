@@ -31,6 +31,11 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const guestToken = localStorage.getItem('menx_guest_token');
+    if (guestToken) {
+      headers['X-Guest-Token'] = guestToken;
+    }
+
     const config = {
       ...options,
       headers,
@@ -65,6 +70,15 @@ class ApiClient {
         error.status = response.status;
         error.data = data;
         throw error;
+      }
+
+      // Automatically capture guest token from successful response data if present
+      if (data && data.success && data.data) {
+        if (data.data.guestToken) {
+          localStorage.setItem('menx_guest_token', data.data.guestToken);
+        } else if (data.data.hasOwnProperty('guestToken') && data.data.guestToken === null) {
+          localStorage.removeItem('menx_guest_token');
+        }
       }
 
       return data;

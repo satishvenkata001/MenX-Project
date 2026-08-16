@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../utils/api.js';
 import { useWishlist } from '../context/WishlistContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useCart } from '../context/CartContext.jsx';
 import { ShoppingBag, Heart, ArrowLeft, ShieldAlert, Check } from 'lucide-react';
 import BaseLayout from '../components/BaseLayout.jsx';
 
@@ -10,6 +11,7 @@ export default function ProductDetail() {
   const { slug } = useParams();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { addToCart } = useCart();
   
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,6 +21,7 @@ export default function ProductDetail() {
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   const navigate = useNavigate();
 
@@ -87,9 +90,15 @@ export default function ProductDetail() {
     }
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedVariant) return;
-    alert(`Successfully added variant ${selectedVariant.sku} to cart (Integration placeholder for Phase 4I-3)!`);
+    try {
+      await addToCart(selectedVariant.id, 1);
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 2000);
+    } catch (err) {
+      alert(err.message || 'Failed to add item to cart');
+    }
   };
 
   if (loading) {
@@ -288,18 +297,31 @@ export default function ProductDetail() {
               
               {/* Add to Cart */}
               <button
-                disabled={!selectedVariant || selectedVariant.availability === 'OUT_OF_STOCK'}
+                disabled={!selectedVariant || selectedVariant.availability === 'OUT_OF_STOCK' || addedToCart}
                 onClick={handleAddToCart}
-                className="flex-grow py-3 px-6 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold rounded-lg transition-colors flex items-center justify-center space-x-2"
+                className={`flex-grow py-3 px-6 text-black font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 ${
+                  addedToCart
+                    ? 'bg-green-500 hover:bg-green-600'
+                    : 'bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 disabled:text-gray-500'
+                }`}
               >
-                <ShoppingBag className="w-5 h-5" />
-                <span>
-                  {!selectedVariant
-                    ? 'Select Size & Color'
-                    : selectedVariant.availability === 'OUT_OF_STOCK'
-                    ? 'Out of Stock'
-                    : 'Add to Cart'}
-                </span>
+                {addedToCart ? (
+                  <>
+                    <Check className="w-5 h-5 text-black" />
+                    <span>Added to Cart!</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-5 h-5" />
+                    <span>
+                      {!selectedVariant
+                        ? 'Select Size & Color'
+                        : selectedVariant.availability === 'OUT_OF_STOCK'
+                        ? 'Out of Stock'
+                        : 'Add to Cart'}
+                    </span>
+                  </>
+                )}
               </button>
 
               {/* Wishlist toggle */}

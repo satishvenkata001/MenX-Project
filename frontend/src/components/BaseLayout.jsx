@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useWishlist } from '../context/WishlistContext.jsx';
+import { useCart } from '../context/CartContext.jsx';
 import { Menu, X, User, ShoppingBag, Heart, LogOut, LayoutDashboard, Shield } from 'lucide-react';
 
 export default function BaseLayout({ children }) {
   const { user, logout, isAdminOrStaff, isAuthenticated } = useAuth();
   const { wishlist } = useWishlist();
+  const { cart } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -34,6 +36,15 @@ export default function BaseLayout({ children }) {
             {/* Navigation links - Desktop */}
             <nav className="hidden md:flex space-x-8 items-center text-sm font-medium text-gray-300">
               <Link to="/" className="hover:text-amber-500 transition-colors duration-200">Shop</Link>
+              <Link to="/cart" className="flex items-center space-x-1.5 hover:text-amber-500 transition-colors duration-200">
+                <ShoppingBag className="w-4 h-4 text-amber-500" />
+                <span>Cart</span>
+                {cart?.summary?.totalQuantity > 0 && (
+                  <span className="bg-amber-500 text-black text-[10px] font-extrabold rounded-full px-1.5 min-w-[16px] h-4 flex items-center justify-center">
+                    {cart.summary.totalQuantity}
+                  </span>
+                )}
+              </Link>
               {isAuthenticated && (
                 <Link to="/wishlist" className="flex items-center space-x-1.5 hover:text-amber-500 transition-colors duration-200">
                   <Heart className="w-4 h-4 text-red-500 fill-red-500" />
@@ -109,6 +120,19 @@ export default function BaseLayout({ children }) {
               className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
             >
               Shop
+            </Link>
+            <Link
+              to="/cart"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+            >
+              <ShoppingBag className="w-4 h-4 text-amber-500" />
+              <span>Cart</span>
+              {cart?.summary?.totalQuantity > 0 && (
+                <span className="bg-amber-500 text-black text-[10px] font-extrabold rounded-full px-1.5 min-w-[16px] h-4 flex items-center justify-center">
+                  {cart.summary.totalQuantity}
+                </span>
+              )}
             </Link>
             {isAuthenticated && (
               <Link
