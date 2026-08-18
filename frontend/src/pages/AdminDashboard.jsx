@@ -115,6 +115,12 @@ export default function AdminDashboard() {
   const [imageAltText, setImageAltText] = useState('');
   const [imageDisplayOrder, setImageDisplayOrder] = useState('0');
   const [imageIsPrimary, setImageIsPrimary] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+  const [deletingImageId, setDeletingImageId] = useState(null);
+  const [settingPrimaryImageId, setSettingPrimaryImageId] = useState(null);
+  const [movingImageId, setMovingImageId] = useState(null);
+  const [imageVariantId, setImageVariantId] = useState('');
+  const [productVariantsForImages, setProductVariantsForImages] = useState([]);
 
   // Determine permissions based on exact backend constants
   const hasInventoryRole = user && ['INVENTORY_MANAGER', 'STORE_MANAGER', 'SUPER_ADMIN'].includes(user.role);
@@ -602,21 +608,73 @@ export default function AdminDashboard() {
     });
   };
 
+  const handleImageFileChange = (file) => {
+    if (!file) {
+      setImageFile(null);
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+      return;
+    }
+
+    // 1. Size check: 2MB limit (2,097,152 bytes)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert(`File size exceeds the 2MB limit (your file: ${(file.size / (1024 * 1024)).toFixed(2)}MB).`);
+      return;
+    }
+
+    // 2. MIME type & extension check
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.webp'];
+    const extension = file.name.slice(((file.name.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+
+    if (!allowedMimes.includes(file.type) || !allowedExts.includes('.' + extension)) {
+      alert("Unsupported file type. Please select a JPEG, PNG, or WEBP image.");
+      return;
+    }
+
+    setImageFile(file);
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Helper to map DB snake_case product_images to frontend camelCase
+  const mapImagesToCamelCase = (data) => {
+    return (data || []).map(img => ({
+      id: img.id,
+      productId: img.product_id || img.productId,
+      variantId: img.variant_id || img.variantId,
+      imageUrl: img.image_url || img.imageUrl,
+      altText: img.alt_text || img.altText,
+      displayOrder: img.display_order !== undefined ? img.display_order : img.displayOrder,
+      isPrimary: img.is_primary !== undefined ? img.is_primary : img.isPrimary,
+      createdAt: img.created_at || img.createdAt
+    }));
+  };
+
   // Product Images Manager
   const openImagesModal = async (prod) => {
     setSelectedProductForImages(prod);
     setShowImagesModal(true);
     setLoadingImages(true);
     setImageFile(null);
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setImagePreviewUrl(null);
     setImageAltText('');
     setImageDisplayOrder('0');
     setImageIsPrimary(false);
+    setImageVariantId('');
+    setProductVariantsForImages([]);
 
     try {
-      const res = await api.get(`/products/${prod.id}/images`);
-      setImages(res.data || []);
+      const [imagesRes, variantsRes] = await Promise.all([
+        api.get(`/products/${prod.id}/images`),
+        api.get(`/products/${prod.id}/variants`)
+      ]);
+      setImages(mapImagesToCamelCase(imagesRes.data || []));
+      setProductVariantsForImages(variantsRes.data || []);
     } catch (err) {
-      console.error('Failed to load images:', err.message);
+      console.error('Failed to load images or variants:', err.message);
     } finally {
       setLoadingImages(false);
     }
@@ -634,6 +692,9 @@ export default function AdminDashboard() {
     formData.append('altText', imageAltText.trim() || '');
     formData.append('displayOrder', imageDisplayOrder);
     formData.append('isPrimary', imageIsPrimary ? 'true' : 'false');
+    if (imageVariantId && imageVariantId !== '') {
+      formData.append('variantId', imageVariantId);
+    }
 
     setUploadingImage(true);
     try {
@@ -642,13 +703,16 @@ export default function AdminDashboard() {
       
       // Reload images list
       const res = await api.get(`/products/${selectedProductForImages.id}/images`);
-      setImages(res.data || []);
+      setImages(mapImagesToCamelCase(res.data || []));
 
       // Reset form
       setImageFile(null);
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
       setImageAltText('');
       setImageDisplayOrder('0');
       setImageIsPrimary(false);
+      setImageVariantId('');
     } catch (err) {
       alert(err.message || 'Failed to upload product image');
     } finally {
@@ -657,14 +721,17 @@ export default function AdminDashboard() {
   };
 
   const handleSetPrimaryImage = async (imageId) => {
+    setSettingPrimaryImageId(imageId);
     try {
       await api.post(`/admin/images/${imageId}/primary`);
       // Reload images
       const res = await api.get(`/products/${selectedProductForImages.id}/images`);
-      setImages(res.data || []);
+      setImages(mapImagesToCamelCase(res.data || []));
       alert('Primary image updated');
     } catch (err) {
       alert(err.message || 'Failed to set primary image');
+    } finally {
+      setSettingPrimaryImageId(null);
     }
   };
 
@@ -672,25 +739,29 @@ export default function AdminDashboard() {
     if (!window.confirm('Are you sure you want to delete this product image?')) {
       return;
     }
+    setDeletingImageId(imageId);
     try {
       await api.delete(`/admin/images/${imageId}`);
       const res = await api.get(`/products/${selectedProductForImages.id}/images`);
-      setImages(res.data || []);
+      setImages(mapImagesToCamelCase(res.data || []));
       alert('Image deleted successfully');
     } catch (err) {
       alert(err.message || 'Failed to delete image');
+    } finally {
+      setDeletingImageId(null);
     }
   };
 
   const handleMoveImageOrder = async (idx, direction) => {
     if (!images || images.length <= 1) return;
     
-    // Copy images array
+    // Copy images array - Standard displayOrder sort works since it is camelCase mapped
     const sorted = [...images].sort((a, b) => a.displayOrder - b.displayOrder);
     
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= sorted.length) return;
 
+    setMovingImageId(sorted[idx].id);
     // Swap displayOrder values
     const tempOrder = sorted[idx].displayOrder;
     sorted[idx].displayOrder = sorted[targetIdx].displayOrder;
@@ -707,9 +778,11 @@ export default function AdminDashboard() {
       });
       // Reload list
       const res = await api.get(`/products/${selectedProductForImages.id}/images`);
-      setImages(res.data || []);
+      setImages(mapImagesToCamelCase(res.data || []));
     } catch (err) {
       alert(err.message || 'Failed to reorder images');
+    } finally {
+      setMovingImageId(null);
     }
   };
 
@@ -2175,7 +2248,6 @@ export default function AdminDashboard() {
               </div>
 
             </div>
-
           </div>
         </div>
       )}
@@ -2191,8 +2263,9 @@ export default function AdminDashboard() {
                 <span className="text-xs text-gray-450 font-normal mt-0.5">Product: {selectedProductForImages.title}</span>
               </h3>
               <button
+                disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
                 onClick={() => setShowImagesModal(false)}
-                className="p-1 rounded-lg border border-gray-800 text-gray-400 hover:text-white"
+                className="p-1 rounded-lg border border-gray-800 text-gray-400 hover:text-white disabled:opacity-30"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2235,44 +2308,94 @@ export default function AdminDashboard() {
                               )}
                             </div>
 
-                            <div className="space-y-1.5 text-xs">
-                              <div className="font-mono text-[10px] text-gray-500">Order: {img.displayOrder}</div>
+                            <div className="space-y-1 text-xs">
+                              <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                                <span>Order: {img.displayOrder}</span>
+                                {img.variantId && (
+                                  <span className="text-indigo-400 bg-indigo-500/10 px-1 rounded text-[8px] font-bold">
+                                    Variant
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {img.altText ? (
+                                <div className="text-[10px] text-gray-400 truncate" title={img.altText}>
+                                  Alt: "{img.altText}"
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-gray-650 italic">No alt text</div>
+                              )}
+
+                              {img.variantId && productVariantsForImages.length > 0 && (
+                                <div className="text-[10px] text-indigo-400 truncate font-semibold" title={(() => {
+                                  const v = productVariantsForImages.find(varItem => varItem.id === img.variantId);
+                                  return v ? `${v.size?.name || ''} / ${v.color?.name || ''} (${v.sku})` : '';
+                                })()}>
+                                  {(() => {
+                                    const v = productVariantsForImages.find(varItem => varItem.id === img.variantId);
+                                    return v ? `${v.size?.name || ''} / ${v.color?.name || ''}` : 'Mapped Variant';
+                                  })()}
+                                </div>
+                              )}
                               
                               <div className="grid grid-cols-2 gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleMoveImageOrder(idx, 'up')}
-                                  disabled={idx === 0}
-                                  className="py-1 bg-gray-950 border border-gray-850 rounded hover:text-white flex items-center justify-center disabled:opacity-30"
+                                  disabled={idx === 0 || movingImageId !== null || deletingImageId !== null || settingPrimaryImageId !== null || uploadingImage}
+                                  className="py-1 bg-gray-955 border border-gray-855 rounded hover:text-white flex items-center justify-center disabled:opacity-30"
                                 >
-                                  <ArrowUp className="w-3 h-3" />
+                                  {movingImageId === img.id ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-t border-white" />
+                                  ) : (
+                                    <ArrowUp className="w-3 h-3" />
+                                  )}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleMoveImageOrder(idx, 'down')}
-                                  disabled={idx === images.length - 1}
-                                  className="py-1 bg-gray-950 border border-gray-855 rounded hover:text-white flex items-center justify-center disabled:opacity-30"
+                                  disabled={idx === images.length - 1 || movingImageId !== null || deletingImageId !== null || settingPrimaryImageId !== null || uploadingImage}
+                                  className="py-1 bg-gray-955 border border-gray-855 rounded hover:text-white flex items-center justify-center disabled:opacity-30"
                                 >
-                                  <ArrowDown className="w-3 h-3" />
+                                  {movingImageId === img.id ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-t border-white" />
+                                  ) : (
+                                    <ArrowDown className="w-3 h-3" />
+                                  )}
                                 </button>
                               </div>
 
                               <div className="flex gap-1.5 pt-1 border-t border-gray-850">
-                                {!img.isPrimary && (
+                                {!img.isPrimary ? (
                                   <button
                                     type="button"
+                                    disabled={settingPrimaryImageId !== null || deletingImageId !== null || movingImageId !== null || uploadingImage}
                                     onClick={() => handleSetPrimaryImage(img.id)}
-                                    className="flex-grow py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-black rounded text-[10px] font-bold"
+                                    className="flex-grow py-1 bg-amber-500/10 hover:bg-amber-500 disabled:bg-gray-955 text-amber-500 hover:text-black disabled:text-gray-700 rounded text-[10px] font-bold transition-all flex items-center justify-center"
                                   >
-                                    Primary
+                                    {settingPrimaryImageId === img.id ? (
+                                      <div className="animate-spin rounded-full h-3 w-3 border-t border-amber-500" />
+                                    ) : (
+                                      <span>Primary</span>
+                                    )}
                                   </button>
+                                ) : (
+                                  <span className="flex-grow py-1 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold text-center flex items-center justify-center space-x-0.5">
+                                    <Check className="w-3 h-3" />
+                                    <span>Cover</span>
+                                  </span>
                                 )}
                                 <button
                                   type="button"
+                                  disabled={deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null || uploadingImage}
                                   onClick={() => handleDeleteImage(img.id)}
-                                  className="p-1 text-red-400 hover:bg-red-500/10 rounded border border-red-500/10"
+                                  className="p-1 text-red-450 hover:bg-red-500/10 disabled:bg-gray-955 disabled:text-gray-705 rounded border border-red-500/10 disabled:border-transparent flex items-center justify-center"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  {deletingImageId === img.id ? (
+                                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-t border-red-500" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
                                 </button>
                               </div>
 
@@ -2295,15 +2418,58 @@ export default function AdminDashboard() {
                 <form onSubmit={handleImageUpload} className="space-y-4 text-xs">
                   {/* File select */}
                   <div className="space-y-1">
-                    <label className="text-[10px] text-gray-500 font-bold block">File (JPEG, PNG, WEBP) *</label>
+                    <label className="text-[10px] text-gray-500 font-bold block">File (JPEG, PNG, WEBP, Max 2MB) *</label>
                     <input
                       type="file"
                       required
-                      accept="image/*"
-                      onChange={(e) => setImageFile(e.target.files[0] || null)}
-                      className="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-black hover:file:bg-amber-600"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => handleImageFileChange(e.target.files[0] || null)}
+                      className="w-full text-xs text-gray-405 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-black hover:file:bg-amber-600 disabled:opacity-40"
+                      disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
                     />
+
+                    {/* Pre-upload local thumbnail preview */}
+                    {imagePreviewUrl && (
+                      <div className="mt-2.5 p-1.5 bg-gray-900 border border-gray-800 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <img src={imagePreviewUrl} alt="Upload preview" className="w-9 h-9 object-cover rounded border border-gray-700" />
+                          <span className="text-[10px] text-gray-400 font-mono truncate max-w-[120px]">{imageFile.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={uploadingImage}
+                          onClick={() => {
+                            setImageFile(null);
+                            if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+                            setImagePreviewUrl(null);
+                          }}
+                          className="p-1 text-gray-500 hover:text-white disabled:opacity-30"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Associate Variant (Optional) */}
+                  {productVariantsForImages.length > 0 && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-500 font-bold block">Associate with Variant (Optional)</label>
+                      <select
+                        value={imageVariantId}
+                        onChange={(e) => setImageVariantId(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-855 rounded-lg p-2 text-white font-bold disabled:opacity-40"
+                        disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
+                      >
+                        <option value="">-- Generic (All Variants) --</option>
+                        {productVariantsForImages.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.size?.name || 'No Size'} / {v.color?.name || 'No Color'} ({v.sku})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Alt text */}
                   <div className="space-y-1">
@@ -2313,7 +2479,8 @@ export default function AdminDashboard() {
                       value={imageAltText}
                       onChange={(e) => setImageAltText(e.target.value)}
                       placeholder="E.g., Front view of product model"
-                      className="w-full bg-gray-900 border border-gray-850 rounded-lg p-2 text-white"
+                      className="w-full bg-gray-900 border border-gray-850 rounded-lg p-2 text-white disabled:opacity-40"
+                      disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
                     />
                   </div>
 
@@ -2325,7 +2492,8 @@ export default function AdminDashboard() {
                       min={0}
                       value={imageDisplayOrder}
                       onChange={(e) => setImageDisplayOrder(e.target.value)}
-                      className="w-full bg-gray-900 border border-gray-850 rounded-lg p-2 text-white font-mono"
+                      className="w-full bg-gray-900 border border-gray-855 rounded-lg p-2 text-white font-mono disabled:opacity-40"
+                      disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
                     />
                   </div>
 
@@ -2336,7 +2504,8 @@ export default function AdminDashboard() {
                       id="primaryImageCheckbox"
                       checked={imageIsPrimary}
                       onChange={(e) => setImageIsPrimary(e.target.checked)}
-                      className="rounded text-amber-500 focus:ring-amber-500 bg-gray-900 border-gray-800"
+                      className="rounded text-amber-500 focus:ring-amber-500 bg-gray-900 border-gray-800 disabled:opacity-40"
+                      disabled={uploadingImage || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
                     />
                     <label htmlFor="primaryImageCheckbox" className="text-[10px] text-gray-400 font-bold cursor-pointer">
                       Make this the primary catalog cover image
@@ -2345,10 +2514,17 @@ export default function AdminDashboard() {
 
                   <button
                     type="submit"
-                    disabled={uploadingImage || !imageFile}
-                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 text-black font-extrabold rounded-lg text-xs"
+                    disabled={uploadingImage || !imageFile || deletingImageId !== null || settingPrimaryImageId !== null || movingImageId !== null}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 text-black font-extrabold rounded-lg text-xs flex items-center justify-center"
                   >
-                    {uploadingImage ? 'Uploading to Bucket...' : 'Upload Image'}
+                    {uploadingImage ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-t border-black mr-2" />
+                        <span>Uploading to Bucket...</span>
+                      </>
+                    ) : (
+                      <span>Upload Image</span>
+                    )}
                   </button>
                 </form>
               </div>
@@ -2358,7 +2534,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-
     </BaseLayout>
   );
 }
