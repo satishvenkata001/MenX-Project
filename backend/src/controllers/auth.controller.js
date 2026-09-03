@@ -60,11 +60,47 @@ export class AuthController {
   });
 
   /**
+   * POST /api/v1/auth/exchange-code
+   */
+  static exchangeCode = asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    const result = await AuthService.exchangeCode(code);
+    return sendSuccess(res, result, 'Code exchanged successfully.');
+  });
+
+  /**
+   * POST /api/v1/auth/verify-otp
+   */
+  static verifyOtp = asyncHandler(async (req, res) => {
+    const { email, token } = req.body;
+    const result = await AuthService.verifyOtp(email, token);
+    return sendSuccess(res, result, 'Email verified successfully.');
+  });
+
+  /**
+   * POST /api/v1/auth/resend-otp
+   */
+  static resendOtp = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    const result = await AuthService.resendOtp(email);
+    return sendSuccess(res, result, 'Verification code resent successfully.');
+  });
+
+  /**
    * POST /api/v1/auth/password-update (Protected)
    */
   static updatePassword = asyncHandler(async (req, res) => {
     const { newPassword } = req.body;
     const result = await AuthService.updatePassword(req.user.id, newPassword);
     return sendSuccess(res, result);
+  });
+
+  /**
+   * PUT /api/v1/auth/profile (Protected)
+   */
+  static updateProfile = asyncHandler(async (req, res) => {
+    const { firstName, lastName, phone } = req.body;
+    const result = await AuthService.updateProfile(req.user.id, { firstName, lastName, phone });
+    return sendSuccess(res, result, 'Profile updated successfully.');
   });
 }

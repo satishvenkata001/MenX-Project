@@ -507,19 +507,11 @@ async function runPhase4CTests() {
     // -------------------------------------------------------------------------
     console.log('\n>>> 6. Atomic Inventory Reservation & Race Condition Tests');
     // Set Talapudi available stock to exactly 1 for race condition testing
-    await fetch(`${baseUrl}/admin/inventory/adjust`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${superAdminToken}`
-      },
-      body: JSON.stringify({
-        storeId: storeTalapudi.id,
-        variantId: testVariant.id,
-        quantity: -2, // Currently 3 -> adjust -2 to make exactly 1
-        reason: 'Set exact 1 for concurrency test'
-      })
-    });
+    await supabaseAdmin
+      .from('inventory_items')
+      .update({ quantity_available: 1, quantity_reserved: 0 })
+      .eq('store_id', storeTalapudi.id)
+      .eq('variant_id', testVariant.id);
 
     const dummyOrderId1 = '11111111-1111-4111-8111-111111111111';
     const dummyOrderId2 = '22222222-2222-4222-8222-222222222222';
@@ -584,8 +576,10 @@ async function runPhase4CTests() {
     // -------------------------------------------------------------------------
     console.log('\n>>> Cleaning up all temporary test fixtures...');
     try {
-      await supabaseAdmin.from('stock_movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('inventory_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (createdVariantIds.length > 0) {
+        await supabaseAdmin.from('stock_movements').delete().in('variant_id', createdVariantIds);
+        await supabaseAdmin.from('inventory_items').delete().in('variant_id', createdVariantIds);
+      }
       if (createdStaffAssignmentIds.length > 0) {
         await supabaseAdmin.from('staff_store_assignments').delete().in('id', createdStaffAssignmentIds);
       }

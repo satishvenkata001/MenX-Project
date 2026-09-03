@@ -15,12 +15,28 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-// 2. CORS Configuration
-const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
+const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:3000'].filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, curl, or server-to-server)
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // In development, dynamically allow any port on localhost, 127.0.0.1, or the local LAN IP
+    if (env.NODE_ENV === 'development') {
+      try {
+        const parsedUrl = new URL(origin);
+        const hostname = parsedUrl.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '10.197.179.122') {
+          return callback(null, true);
+        }
+      } catch (err) {
+        // Safe fallback on URL parsing error
+      }
+    }
+
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`CORS policy blocked access from origin: ${origin}`));

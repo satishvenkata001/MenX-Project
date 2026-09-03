@@ -153,10 +153,20 @@ export const createVariantSchema = z.object({
     mrp: z.number().positive('MRP must be positive'),
     sellingPrice: z.number().positive('Selling price must be positive'),
     weightGrams: z.number().int().positive().optional().default(300),
-    lowStockThreshold: z.number().int().min(0).optional().default(5)
+    lowStockThreshold: z.number().int().min(0).optional().default(5),
+    initialStock: z.number().int({ message: 'Initial stock must be an integer' }).min(0, { message: 'Initial stock cannot be negative' }).optional().default(0),
+    stockStoreId: uuidSchema.optional().nullable()
   }).refine(data => data.sellingPrice <= data.mrp, {
     message: 'Selling price cannot exceed MRP',
     path: ['sellingPrice']
+  }).refine(data => {
+    if (data.initialStock && data.initialStock > 0) {
+      return !!data.stockStoreId;
+    }
+    return true;
+  }, {
+    message: 'Stock store must be selected when initial stock is greater than 0',
+    path: ['stockStoreId']
   })
 });
 

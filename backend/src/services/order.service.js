@@ -268,7 +268,19 @@ export const getOrders = async (userId, { page = 1, limit = 10, status }) => {
 export const getOrderDetails = async (userId, orderId) => {
   const { data: order, error } = await supabaseAdmin
     .from('orders')
-    .select('*, order_items(*)')
+    .select(`
+      *,
+      order_items(
+        *,
+        variant:product_variants(
+          id,
+          product:products(
+            id,
+            images:product_images(image_url, is_primary, display_order)
+          )
+        )
+      )
+    `)
     .eq('id', orderId)
     .eq('customer_id', userId)
     .single();
@@ -344,13 +356,19 @@ export const cancelOrder = async (userId, orderId, reason) => {
       throw AppError.badRequest(`Cannot cancel order in ${order.order_status} status`);
     }
 
-    // 2. Update order status to CANCELLED
+    // 2. Update order status to CANCELLED and store cancellation reason
     await client.query(
-      "UPDATE orders SET order_status = 'CANCELLED', updated_at = NOW() WHERE id = $1",
-      [orderId]
+      "UPDATE orders SET order_status = 'CANCELLED', cancelled_reason = $2, updated_at = NOW() WHERE id = $1",
+      [orderId, reason || 'Order cancelled by customer']
     );
 
-    // Note: The database AFTER UPDATE trigger trg_orders_status_history automatically writes the status change history entry.
+    // 2.1 Update the automatically created status history log to include the cancellation reason
+    await client.query(
+      `UPDATE order_status_history 
+       SET note = $1, changed_by = $2 
+       WHERE order_id = $3 AND to_status = 'CANCELLED'`,
+      [reason ? `Order cancelled: ${reason}` : 'Order cancelled by customer', userId, orderId]
+    );
 
     // 3. Fetch items to restore stock
     const itemsRes = await client.query(
@@ -359,6 +377,8 @@ export const cancelOrder = async (userId, orderId, reason) => {
     );
 
     for (const item of itemsRes.rows) {
+      if (!item.variant_id || !order.store_id) continue;
+
       // 4. Update inventory_items to restore stock
       await client.query(
         `UPDATE inventory_items 

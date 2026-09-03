@@ -10,6 +10,7 @@ import orderRoutes from './order.routes.js';
 import adminOrderRoutes from './adminOrder.routes.js';
 import returnRoutes from './return.routes.js';
 import addressRoutes from './address.routes.js';
+import adminCustomerRoutes from './adminCustomer.routes.js';
 
 const apiRouter = Router();
 
@@ -21,6 +22,7 @@ apiRouter.use('/wishlist', wishlistRoutes);
 apiRouter.use('/addresses', addressRoutes);
 apiRouter.use('/admin', adminCatalogRoutes);
 apiRouter.use('/admin', inventoryRoutes);
+apiRouter.use('/admin', adminCustomerRoutes);
 apiRouter.use('/', catalogRoutes);
 apiRouter.use('/', orderRoutes);
 apiRouter.use('/', adminOrderRoutes);

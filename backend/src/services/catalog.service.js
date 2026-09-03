@@ -1,4 +1,5 @@
 import { supabaseAdmin, createUserClient } from '../config/supabase.js';
+import { pool } from '../config/db.js';
 import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
@@ -26,6 +27,25 @@ export class CatalogService {
 
     if (error) {
       logger.error('Failed to list categories', { error: error.message });
+      throw AppError.internal('Failed to retrieve categories');
+    }
+
+    return data || [];
+  }
+
+  /**
+   * List all categories for administrative management (including inactive)
+   */
+  static async listAdminCategories() {
+    const { data, error } = await supabaseAdmin
+      .from('categories')
+      .select('id, name, slug, description, image_url, display_order, is_active, created_at, updated_at')
+      .order('display_order', { ascending: true })
+      .order('name', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      logger.error('Failed to list admin categories', { error: error.message });
       throw AppError.internal('Failed to retrieve categories');
     }
 
@@ -117,12 +137,19 @@ export class CatalogService {
   /**
    * List active sizes
    */
-  static async listSizes() {
-    const { data, error } = await supabaseAdmin
+  static async listSizes(query = {}) {
+    const categoryType = query?.category_type || query?.categoryType;
+    let dbQuery = supabaseAdmin
       .from('sizes')
       .select('id, name, category_type, sort_order')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
+
+    if (categoryType) {
+      dbQuery = dbQuery.eq('category_type', categoryType.toUpperCase());
+    }
+
+    const { data, error } = await dbQuery;
 
     if (error) {
       logger.error('Failed to list sizes', { error: error.message });
@@ -307,7 +334,7 @@ export class CatalogService {
         brand:brands(id, name, slug, logo_url),
         images:product_images(id, image_url, alt_text, display_order, is_primary, variant_id),
         variants:product_variants(
-          id, sku, barcode, mrp, selling_price, weight_grams, is_active,
+          id, sku, barcode, mrp, selling_price, weight_grams, low_stock_threshold, is_active,
           size:sizes(id, name, category_type),
           color:colors(id, name, hex_code)
         )
@@ -373,6 +400,8 @@ export class CatalogService {
         weightGrams: v.weight_grams,
         isActive: v.is_active,
         availability,
+        availableStock: totalAvailable,
+        quantityAvailable: totalAvailable,
         size: v.size,
         color: v.color
       };
@@ -434,7 +463,37 @@ export class CatalogService {
       throw AppError.internal('Failed to retrieve product variants');
     }
 
-    return data || [];
+    const variants = data || [];
+    const variantIds = variants.map(v => v.id);
+    let stockMap = {};
+    if (variantIds.length > 0) {
+      const { data: stockRecords } = await supabaseAdmin
+        .from('inventory_items')
+        .select('variant_id, quantity_available')
+        .in('variant_id', variantIds);
+
+      (stockRecords || []).forEach(sr => {
+        stockMap[sr.variant_id] = (stockMap[sr.variant_id] || 0) + (sr.quantity_available || 0);
+      });
+    }
+
+    return variants.map(v => {
+      const totalAvailable = stockMap[v.id] || 0;
+      const threshold = v.low_stock_threshold ?? 5;
+      let availability = 'OUT_OF_STOCK';
+      if (totalAvailable > threshold) {
+        availability = 'IN_STOCK';
+      } else if (totalAvailable > 0) {
+        availability = 'LOW_STOCK';
+      }
+
+      return {
+        ...v,
+        availableStock: totalAvailable,
+        quantityAvailable: totalAvailable,
+        availability
+      };
+    });
   }
 
   /**
@@ -481,6 +540,18 @@ export class CatalogService {
       isFeatured = false
     } = data;
 
+    // Verify subcategory exists and belongs to categoryId
+    const { data: validSub, error: subErr } = await supabaseAdmin
+      .from('subcategories')
+      .select('id, category_id, is_active')
+      .eq('id', subcategoryId)
+      .eq('category_id', categoryId)
+      .maybeSingle();
+
+    if (subErr || !validSub) {
+      throw AppError.badRequest('Selected subcategory does not belong to the selected category');
+    }
+
     const { data: product, error } = await client
       .from('products')
       .insert({
@@ -514,10 +585,43 @@ export class CatalogService {
   }
 
   /**
-   * Update product details
+   * Update product details with category/subcategory validation
    */
   static async updateProduct(id, data, token) {
     const client = this.getClient(token);
+
+    // Validate Category-Subcategory relation if either is modified
+    if (data.subcategoryId || data.categoryId) {
+      let targetCatId = data.categoryId;
+      let targetSubId = data.subcategoryId;
+
+      if (!targetCatId || !targetSubId) {
+        const { data: currentProduct } = await supabaseAdmin
+          .from('products')
+          .select('category_id, subcategory_id')
+          .eq('id', id)
+          .single();
+
+        if (currentProduct) {
+          targetCatId = targetCatId || currentProduct.category_id;
+          targetSubId = targetSubId || currentProduct.subcategory_id;
+        }
+      }
+
+      if (targetCatId && targetSubId) {
+        const { data: validSub } = await supabaseAdmin
+          .from('subcategories')
+          .select('id')
+          .eq('id', targetSubId)
+          .eq('category_id', targetCatId)
+          .maybeSingle();
+
+        if (!validSub) {
+          throw AppError.badRequest('Selected subcategory does not belong to the selected category');
+        }
+      }
+    }
+
     const updatePayload = {};
     if (data.title !== undefined) updatePayload.title = data.title;
     if (data.slug !== undefined) updatePayload.slug = data.slug;
@@ -582,9 +686,85 @@ export class CatalogService {
       mrp,
       sellingPrice,
       weightGrams = 300,
-      lowStockThreshold = 5
+      lowStockThreshold = 5,
+      initialStock = 0,
+      stockStoreId = null
     } = data;
 
+    // 1. Validate initialStock if provided
+    const parsedInitialStock = parseInt(initialStock, 10);
+    if (initialStock !== undefined && initialStock !== null && (isNaN(parsedInitialStock) || parsedInitialStock < 0 || !Number.isInteger(Number(initialStock)))) {
+      throw AppError.badRequest('Initial stock must be a non-negative integer');
+    }
+
+    // 2. Load the product & verify existence
+    const { data: product, error: prodErr } = await client
+      .from('products')
+      .select('id, category_id, categories:category_id ( id, name, slug )')
+      .eq('id', productId)
+      .single();
+
+    if (prodErr || !product) {
+      throw AppError.notFound(`Product with ID '${productId}' not found`);
+    }
+
+    // 3. Load the selected size & verify existence
+    const { data: size, error: sizeErr } = await client
+      .from('sizes')
+      .select('id, name, category_type')
+      .eq('id', sizeId)
+      .single();
+
+    if (sizeErr || !size) {
+      throw AppError.badRequest(`Size with ID '${sizeId}' not found`);
+    }
+
+    // 4. Determine expected category_type and validate compatibility
+    const categorySlug = product.categories?.slug?.toLowerCase() || '';
+    const categoryName = product.categories?.name?.toLowerCase() || '';
+    const isFootwear = categorySlug === 'footwear' || categoryName === 'footwear';
+    const expectedCategoryType = isFootwear ? 'FOOTWEAR' : 'APPAREL';
+
+    if (size.category_type !== expectedCategoryType) {
+      throw AppError.badRequest('Selected size is not valid for this product category.');
+    }
+
+    // 5. Load the selected color & verify existence
+    const { data: color, error: colorErr } = await client
+      .from('colors')
+      .select('id, name, hex_code')
+      .eq('id', colorId)
+      .single();
+
+    if (colorErr || !color) {
+      throw AppError.badRequest(`Color with ID '${colorId}' not found`);
+    }
+
+    // 6. If initialStock > 0, validate store
+    let targetStore = null;
+    if (parsedInitialStock > 0) {
+      if (!stockStoreId) {
+        throw AppError.badRequest('Stock store must be selected when initial stock is greater than 0');
+      }
+
+      const { data: store, error: storeErr } = await supabaseAdmin
+        .from('stores')
+        .select('id, name, code, is_active')
+        .eq('id', stockStoreId)
+        .single();
+
+      if (storeErr || !store) {
+        throw AppError.badRequest('Invalid store specified for initial stock');
+      }
+
+      if (!store.is_active) {
+        throw AppError.badRequest('Selected store is inactive and cannot receive stock');
+      }
+
+      targetStore = store;
+    }
+
+    // 7. Insert the variant record
     const { data: variant, error } = await client
       .from('product_variants')
       .insert({
@@ -612,7 +792,65 @@ export class CatalogService {
       throw AppError.badRequest(error.message || 'Failed to create variant');
     }
 
-    return variant;
+    // 8. If initialStock > 0, create inventory_items and stock_movements ledger entry
+    if (parsedInitialStock > 0 && targetStore) {
+      try {
+        const { data: inventoryItem, error: invErr } = await supabaseAdmin
+          .from('inventory_items')
+          .insert({
+            store_id: targetStore.id,
+            variant_id: variant.id,
+            quantity_available: parsedInitialStock,
+            quantity_reserved: 0,
+            quantity_damaged: 0
+          })
+          .select()
+          .single();
+
+        if (invErr || !inventoryItem) {
+          logger.error('Failed to create inventory_items for new variant', { error: invErr?.message });
+          // Cleanup newly created variant to ensure atomicity
+          await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
+          throw AppError.internal('Failed to initialize inventory for the new variant');
+        }
+
+        const { error: moveErr } = await supabaseAdmin
+          .from('stock_movements')
+          .insert({
+            variant_id: variant.id,
+            source_store_id: targetStore.id,
+            destination_store_id: null,
+            movement_type: 'PURCHASE_RECEIPT',
+            quantity: parsedInitialStock,
+            reference_type: 'INITIAL_STOCK',
+            reason: 'Initial stock receipt'
+          });
+
+        if (moveErr) {
+          logger.warn('Failed to record stock movement for initial stock', { error: moveErr.message });
+        }
+      } catch (err) {
+        // Rollback variant if inventory creation threw
+        await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
+        throw err;
+      }
+    }
+
+    const availableStock = parsedInitialStock || 0;
+    const threshold = variant.low_stock_threshold ?? 5;
+    let availability = 'OUT_OF_STOCK';
+    if (availableStock > threshold) {
+      availability = 'IN_STOCK';
+    } else if (availableStock > 0) {
+      availability = 'LOW_STOCK';
+    }
+
+    return {
+      ...variant,
+      availableStock,
+      quantityAvailable: availableStock,
+      availability
+    };
   }
 
   /**
@@ -987,5 +1225,415 @@ export class CatalogService {
     }
 
     return updated;
+  }
+
+  /**
+   * Helper function to clean up physical storage files after DB transaction commit
+   */
+  static async cleanupStorageImages(imageUrls, contextLabel = '') {
+    if (!imageUrls || imageUrls.length === 0) return;
+    try {
+      const bucketName = env.IMAGE_BUCKET_NAME || 'menx-product-images';
+      const bucketMarker = '/public/menx-product-images/';
+      const paths = [];
+      for (const imgUrl of imageUrls) {
+        if (imgUrl) {
+          const markerIndex = imgUrl.indexOf(bucketMarker);
+          if (markerIndex !== -1) {
+            paths.push(imgUrl.substring(markerIndex + bucketMarker.length));
+          }
+        }
+      }
+      if (paths.length > 0) {
+        const { error: storageDelErr } = await supabaseAdmin.storage.from(bucketName).remove(paths);
+        if (storageDelErr) {
+          logger.warn(`Storage file removal encountered warning for ${contextLabel}:`, { error: storageDelErr.message, paths });
+        } else {
+          logger.info(`Cleaned up ${paths.length} storage image files for ${contextLabel}`);
+        }
+      }
+    } catch (storageErr) {
+      logger.warn(`Storage file removal exception for ${contextLabel}:`, { error: storageErr.message });
+    }
+  }
+
+  /**
+   * Permanently hard-delete a product and its dependent catalogue records in an atomic transaction
+   */
+  static async deleteProduct(id, user = null, token = null, reqInfo = {}) {
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured for atomic transactions');
+    }
+
+    const client = await pool.connect();
+    let storageImageUrls = [];
+    let productDetails = null;
+
+    try {
+      await client.query('BEGIN');
+
+      // 1. Fetch product under write lock
+      const prodRes = await client.query(
+        `SELECT id, title, slug, description, status, category_id, subcategory_id, brand_id, base_mrp, base_price, created_at 
+         FROM products 
+         WHERE id = $1 
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (prodRes.rows.length === 0) {
+        throw AppError.notFound(`Product with ID '${id}' not found`);
+      }
+      const product = prodRes.rows[0];
+      productDetails = product;
+
+      // 2. Fetch all variants
+      const varRes = await client.query(
+        `SELECT id, sku FROM product_variants WHERE product_id = $1`,
+        [id]
+      );
+      const variantIds = varRes.rows.map(v => v.id);
+
+      // 3. Collect image URLs
+      const imgRes = await client.query(
+        `SELECT image_url FROM product_images WHERE product_id = $1`,
+        [id]
+      );
+      storageImageUrls = imgRes.rows.map(r => r.image_url).filter(Boolean);
+
+      // 4. Delete dependent catalogue records
+      await client.query(`DELETE FROM outfit_items WHERE product_id = $1`, [id]);
+      await client.query(`DELETE FROM wishlist_items WHERE product_id = $1`, [id]);
+      await client.query(`DELETE FROM reviews WHERE product_id = $1`, [id]);
+
+      if (variantIds.length > 0) {
+        await client.query(`DELETE FROM cart_items WHERE variant_id = ANY($1)`, [variantIds]);
+        
+        // Nullify historical transaction references
+        await client.query(`UPDATE return_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+        await client.query(`UPDATE return_items SET replacement_variant_id = NULL WHERE replacement_variant_id = ANY($1)`, [variantIds]);
+        await client.query(`UPDATE order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+        await client.query(`UPDATE purchase_order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+        
+        // Delete inventory and stock movements
+        await client.query(`DELETE FROM stock_movements WHERE variant_id = ANY($1)`, [variantIds]);
+        await client.query(`DELETE FROM inventory_items WHERE variant_id = ANY($1)`, [variantIds]);
+      }
+
+      await client.query(`DELETE FROM product_images WHERE product_id = $1`, [id]);
+      await client.query(`DELETE FROM product_variants WHERE product_id = $1`, [id]);
+      await client.query(`DELETE FROM products WHERE id = $1`, [id]);
+
+      // 5. Audit log inside the transaction BEFORE commit
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, actor_role, action, target_entity, target_id, old_values, new_values, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          user?.id || null,
+          user?.role || 'SUPER_ADMIN',
+          'DELETE_PRODUCT',
+          'products',
+          id,
+          JSON.stringify({
+            id: product.id,
+            title: product.title,
+            slug: product.slug,
+            status: product.status,
+            category_id: product.category_id,
+            subcategory_id: product.subcategory_id,
+            brand_id: product.brand_id,
+            deletedVariantCount: variantIds.length,
+            deletedImageCount: storageImageUrls.length
+          }),
+          null,
+          reqInfo.ip || null,
+          reqInfo.userAgent || null
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`[DELETE_PRODUCT_TRANSACTION_FAILED] Failed to delete product ${id}:`, err);
+      if (err instanceof AppError) throw err;
+      throw AppError.internal(`Failed to delete product: ${err.message}`);
+    } finally {
+      client.release();
+    }
+
+    // 6. After commit: Storage cleanup (never aborts or rolls back the DB)
+    await CatalogService.cleanupStorageImages(storageImageUrls, `product ${id}`);
+
+    logger.info(`Product '${productDetails.title}' (${productDetails.slug}, ID: ${id}) permanently hard-deleted by user ${user?.id || 'system'}`);
+
+    return {
+      message: 'Product permanently deleted successfully',
+      id,
+      title: productDetails.title,
+      slug: productDetails.slug
+    };
+  }
+
+  /**
+   * Permanently hard-delete a category and ALL its dependent catalogue data in an atomic transaction
+   */
+  static async deleteCategory(id, user = null, token = null, reqInfo = {}) {
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured for atomic transactions');
+    }
+
+    const client = await pool.connect();
+    let storageImageUrls = [];
+    let categoryDetails = null;
+
+    try {
+      await client.query('BEGIN');
+
+      // 1. Fetch category under write lock
+      const catRes = await client.query(
+        `SELECT id, name, slug, description, display_order, is_active FROM categories WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      if (catRes.rows.length === 0) {
+        throw AppError.notFound(`Category with ID '${id}' not found`);
+      }
+      const category = catRes.rows[0];
+      categoryDetails = category;
+
+      // 2. Find all subcategories under this category
+      const subRes = await client.query(
+        `SELECT id, name, slug FROM subcategories WHERE category_id = $1`,
+        [id]
+      );
+      const subcategoryIds = subRes.rows.map(s => s.id);
+
+      // 3. Find all products directly in this category OR under its subcategories
+      let prodRes;
+      if (subcategoryIds.length > 0) {
+        prodRes = await client.query(
+          `SELECT id, title, slug FROM products WHERE category_id = $1 OR subcategory_id = ANY($2)`,
+          [id, subcategoryIds]
+        );
+      } else {
+        prodRes = await client.query(
+          `SELECT id, title, slug FROM products WHERE category_id = $1`,
+          [id]
+        );
+      }
+      const productIds = prodRes.rows.map(p => p.id);
+
+      let variantIds = [];
+      if (productIds.length > 0) {
+        // 4. Find all variants for these products
+        const varRes = await client.query(
+          `SELECT id, sku FROM product_variants WHERE product_id = ANY($1)`,
+          [productIds]
+        );
+        variantIds = varRes.rows.map(v => v.id);
+
+        // 5. Collect product image URLs
+        const imgRes = await client.query(
+          `SELECT image_url FROM product_images WHERE product_id = ANY($1)`,
+          [productIds]
+        );
+        storageImageUrls = imgRes.rows.map(r => r.image_url).filter(Boolean);
+
+        // 6. Delete catalogue-owned dependents for these products
+        await client.query(`DELETE FROM outfit_items WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM wishlist_items WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM reviews WHERE product_id = ANY($1)`, [productIds]);
+
+        if (variantIds.length > 0) {
+          await client.query(`DELETE FROM cart_items WHERE variant_id = ANY($1)`, [variantIds]);
+
+          // Nullify historical transaction references
+          await client.query(`UPDATE return_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE return_items SET replacement_variant_id = NULL WHERE replacement_variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE purchase_order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+
+          // Delete inventory and stock movements
+          await client.query(`DELETE FROM stock_movements WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`DELETE FROM inventory_items WHERE variant_id = ANY($1)`, [variantIds]);
+        }
+
+        await client.query(`DELETE FROM product_images WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM product_variants WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM products WHERE id = ANY($1)`, [productIds]);
+      }
+
+      // 7. Delete subcategories
+      if (subcategoryIds.length > 0) {
+        await client.query(`DELETE FROM subcategories WHERE category_id = $1`, [id]);
+      }
+
+      // 8. Delete category
+      await client.query(`DELETE FROM categories WHERE id = $1`, [id]);
+
+      // 9. Insert audit log inside the transaction BEFORE commit
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, actor_role, action, target_entity, target_id, old_values, new_values, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          user?.id || null,
+          user?.role || 'SUPER_ADMIN',
+          'DELETE_CATEGORY',
+          'categories',
+          id,
+          JSON.stringify({
+            id: category.id,
+            name: category.name,
+            slug: category.slug,
+            description: category.description,
+            deletedSubcategoryCount: subcategoryIds.length,
+            deletedProductCount: productIds.length,
+            deletedVariantCount: variantIds.length,
+            deletedImageCount: storageImageUrls.length
+          }),
+          null,
+          reqInfo.ip || null,
+          reqInfo.userAgent || null
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`[DELETE_CATEGORY_TRANSACTION_FAILED] Failed to delete category ${id}:`, err);
+      if (err instanceof AppError) throw err;
+      throw AppError.internal(`Failed to delete category: ${err.message}`);
+    } finally {
+      client.release();
+    }
+
+    // 10. After commit: Storage cleanup
+    await CatalogService.cleanupStorageImages(storageImageUrls, `category ${id}`);
+
+    logger.info(`Category '${categoryDetails.name}' (${categoryDetails.slug}, ID: ${id}) permanently hard-deleted by user ${user?.id || 'system'}`);
+
+    return {
+      message: 'Category permanently deleted successfully',
+      id,
+      name: categoryDetails.name,
+      slug: categoryDetails.slug
+    };
+  }
+
+  /**
+   * Permanently hard-delete a subcategory and its products in an atomic transaction
+   */
+  static async deleteSubcategory(id, user = null, token = null, reqInfo = {}) {
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured for atomic transactions');
+    }
+
+    const client = await pool.connect();
+    let storageImageUrls = [];
+    let subcategoryDetails = null;
+
+    try {
+      await client.query('BEGIN');
+
+      // 1. Fetch subcategory under write lock
+      const subRes = await client.query(
+        `SELECT id, name, slug, category_id FROM subcategories WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      if (subRes.rows.length === 0) {
+        throw AppError.notFound(`Subcategory with ID '${id}' not found`);
+      }
+      const subcategory = subRes.rows[0];
+      subcategoryDetails = subcategory;
+
+      // 2. Find all products under this subcategory
+      const prodRes = await client.query(
+        `SELECT id, title, slug FROM products WHERE subcategory_id = $1`,
+        [id]
+      );
+      const productIds = prodRes.rows.map(p => p.id);
+
+      let variantIds = [];
+      if (productIds.length > 0) {
+        const varRes = await client.query(
+          `SELECT id, sku FROM product_variants WHERE product_id = ANY($1)`,
+          [productIds]
+        );
+        variantIds = varRes.rows.map(v => v.id);
+
+        const imgRes = await client.query(
+          `SELECT image_url FROM product_images WHERE product_id = ANY($1)`,
+          [productIds]
+        );
+        storageImageUrls = imgRes.rows.map(r => r.image_url).filter(Boolean);
+
+        await client.query(`DELETE FROM outfit_items WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM wishlist_items WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM reviews WHERE product_id = ANY($1)`, [productIds]);
+
+        if (variantIds.length > 0) {
+          await client.query(`DELETE FROM cart_items WHERE variant_id = ANY($1)`, [variantIds]);
+
+          // Nullify historical transaction references
+          await client.query(`UPDATE return_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE return_items SET replacement_variant_id = NULL WHERE replacement_variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`UPDATE purchase_order_items SET variant_id = NULL WHERE variant_id = ANY($1)`, [variantIds]);
+
+          await client.query(`DELETE FROM stock_movements WHERE variant_id = ANY($1)`, [variantIds]);
+          await client.query(`DELETE FROM inventory_items WHERE variant_id = ANY($1)`, [variantIds]);
+        }
+
+        await client.query(`DELETE FROM product_images WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM product_variants WHERE product_id = ANY($1)`, [productIds]);
+        await client.query(`DELETE FROM products WHERE id = ANY($1)`, [productIds]);
+      }
+
+      await client.query(`DELETE FROM subcategories WHERE id = $1`, [id]);
+
+      // Audit log inside transaction
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, actor_role, action, target_entity, target_id, old_values, new_values, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          user?.id || null,
+          user?.role || 'SUPER_ADMIN',
+          'DELETE_SUBCATEGORY',
+          'subcategories',
+          id,
+          JSON.stringify({
+            id: subcategory.id,
+            name: subcategory.name,
+            slug: subcategory.slug,
+            category_id: subcategory.category_id,
+            deletedProductCount: productIds.length,
+            deletedVariantCount: variantIds.length,
+            deletedImageCount: storageImageUrls.length
+          }),
+          null,
+          reqInfo.ip || null,
+          reqInfo.userAgent || null
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`[DELETE_SUBCATEGORY_TRANSACTION_FAILED] Failed to delete subcategory ${id}:`, err);
+      if (err instanceof AppError) throw err;
+      throw AppError.internal(`Failed to delete subcategory: ${err.message}`);
+    } finally {
+      client.release();
+    }
+
+    await CatalogService.cleanupStorageImages(storageImageUrls, `subcategory ${id}`);
+
+    logger.info(`Subcategory '${subcategoryDetails.name}' (${subcategoryDetails.slug}, ID: ${id}) permanently hard-deleted by user ${user?.id || 'system'}`);
+
+    return {
+      message: 'Subcategory deleted successfully',
+      id,
+      name: subcategoryDetails.name,
+      slug: subcategoryDetails.slug
+    };
   }
 }

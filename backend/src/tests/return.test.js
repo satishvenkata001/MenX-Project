@@ -608,7 +608,7 @@ async function runPhase4FTests() {
     await makeRequest(`${baseUrl}/admin/returns/${resellRetId}/status`, 'POST', adminToken, { status: 'COMPLETED' });
 
     const { data: invPostResell } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('store_id', st.id).eq('variant_id', variant1.id).single();
-    await assert('INV-01: Resellable returns increase quantity_available', invPostResell.quantity_available === invPreResell.quantity_available);
+    await assert('INV-01: Resellable returns restore quantity_available', invPostResell.quantity_available === invPreResell.quantity_available);
     
     // Verify Defective Return (INV-02)
     const orderInvDefect = await setupTestOrder(customer1UserId, testVariant1.id, 1);
@@ -726,65 +726,111 @@ async function runPhase4FTests() {
     // -------------------------------------------------------------------------
     console.log('\n>>> Cleaning up all temporary test fixtures...');
     try {
-      if (createdReturnIds.length > 0) {
-        await supabaseAdmin.from('return_status_history').delete().in('return_request_id', createdReturnIds);
-        await supabaseAdmin.from('return_items').delete().in('return_request_id', createdReturnIds);
-        await supabaseAdmin.from('return_requests').delete().in('id', createdReturnIds);
-      }
+      const allUserIds = [customer1UserId, customer2UserId, adminUserId].filter(Boolean);
 
+      // Step 1: Find all return requests created for these orders or customers
+      let allReturnIds = [...createdReturnIds];
       if (createdOrderIds.length > 0) {
-        await supabaseAdmin.from('order_status_history').delete().in('order_id', createdOrderIds);
-        await supabaseAdmin.from('order_items').delete().in('order_id', createdOrderIds);
-        await supabaseAdmin.from('coupon_redemptions').delete().in('order_id', createdOrderIds);
-        await supabaseAdmin.from('stock_movements').delete().in('reference_id', createdOrderIds);
-        // Clean up returns referencing these orders
-        await supabaseAdmin.from('return_requests').delete().in('order_id', createdOrderIds);
-        await supabaseAdmin.from('orders').delete().in('id', createdOrderIds);
+        const { data: ordReturns } = await supabaseAdmin.from('return_requests').select('id').in('order_id', createdOrderIds);
+        if (ordReturns) allReturnIds.push(...ordReturns.map(r => r.id));
+      }
+      if (allUserIds.length > 0) {
+        const { data: userReturns } = await supabaseAdmin.from('return_requests').select('id').in('customer_id', allUserIds);
+        if (userReturns) allReturnIds.push(...userReturns.map(r => r.id));
+      }
+      allReturnIds = [...new Set(allReturnIds)];
+
+      if (allReturnIds.length > 0) {
+        try { await supabaseAdmin.from('return_status_history').delete().in('return_request_id', allReturnIds); } catch (e) {}
+        try { await supabaseAdmin.from('return_items').delete().in('return_request_id', allReturnIds); } catch (e) {}
+        try { await supabaseAdmin.from('return_requests').delete().in('id', allReturnIds); } catch (e) {}
       }
 
-      await supabaseAdmin.from('cart_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('carts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('inventory_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      // Step 2: Find all orders created by test customers
+      let allOrderIds = [...createdOrderIds];
+      if (allUserIds.length > 0) {
+        const { data: userOrders } = await supabaseAdmin.from('orders').select('id').in('customer_id', allUserIds);
+        if (userOrders) allOrderIds.push(...userOrders.map(o => o.id));
+      }
+      allOrderIds = [...new Set(allOrderIds)];
+
+      if (allOrderIds.length > 0) {
+        try { await supabaseAdmin.from('return_status_history').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('return_items').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('return_requests').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('order_status_history').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('order_items').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('coupon_redemptions').delete().in('order_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('stock_movements').delete().in('reference_id', allOrderIds); } catch (e) {}
+        try { await supabaseAdmin.from('orders').delete().in('id', allOrderIds); } catch (e) {}
+      }
+
+      // Step 3: Clean up variants and inventory
+      if (createdProductIds.length > 0) {
+        try {
+          const { data: vList } = await supabaseAdmin.from('product_variants').select('id').in('product_id', createdProductIds);
+          if (vList && vList.length > 0) {
+            const vIds = vList.map(v => v.id);
+            try { await supabaseAdmin.from('order_items').delete().in('variant_id', vIds); } catch (e) {}
+            try { await supabaseAdmin.from('inventory_items').delete().in('variant_id', vIds); } catch (e) {}
+            try { await supabaseAdmin.from('cart_items').delete().in('variant_id', vIds); } catch (e) {}
+            try { await supabaseAdmin.from('stock_movements').delete().in('variant_id', vIds); } catch (e) {}
+            try { await supabaseAdmin.from('product_variants').delete().in('id', vIds); } catch (e) {}
+          }
+        } catch (e) {}
+      }
 
       if (createdVariantIds.length > 0) {
-        await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds);
+        try { await supabaseAdmin.from('order_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('inventory_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('cart_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('stock_movements').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds); } catch (e) {}
       }
+      if (customer1UserId) {
+        try { await supabaseAdmin.from('carts').delete().eq('user_id', customer1UserId); } catch (e) {}
+      }
+      if (customer2UserId) {
+        try { await supabaseAdmin.from('carts').delete().eq('user_id', customer2UserId); } catch (e) {}
+      }
+
       if (createdProductIds.length > 0) {
-        await supabaseAdmin.from('products').delete().in('id', createdProductIds);
-      }
-      if (createdSubcategoryIds.length > 0) {
-        await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds);
+        try { await supabaseAdmin.from('product_images').delete().in('product_id', createdProductIds); } catch (e) {}
+        try { await supabaseAdmin.from('products').delete().in('id', createdProductIds); } catch (e) {}
       }
       if (createdCategoryIds.length > 0) {
-        await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds);
+        try { await supabaseAdmin.from('products').delete().in('category_id', createdCategoryIds); } catch (e) {}
+        try { await supabaseAdmin.from('subcategories').delete().in('category_id', createdCategoryIds); } catch (e) {}
+      }
+      if (createdSubcategoryIds.length > 0) {
+        try { await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds); } catch (e) {}
+      }
+      if (createdCategoryIds.length > 0) {
+        try { await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds); } catch (e) {}
       }
       if (createdBrandIds.length > 0) {
-        await supabaseAdmin.from('brands').delete().in('id', createdBrandIds);
+        try { await supabaseAdmin.from('brands').delete().in('id', createdBrandIds); } catch (e) {}
       }
       if (createdSizeIds.length > 0) {
-        await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds);
+        try { await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds); } catch (e) {}
       }
       if (createdColorIds.length > 0) {
-        await supabaseAdmin.from('colors').delete().in('id', createdColorIds);
+        try { await supabaseAdmin.from('colors').delete().in('id', createdColorIds); } catch (e) {}
       }
       if (createdStoreIds.length > 0) {
-        await supabaseAdmin.from('stores').delete().in('id', createdStoreIds);
+        try { await supabaseAdmin.from('stores').delete().in('id', createdStoreIds); } catch (e) {}
       }
       if (createdZoneIds.length > 0) {
-        await supabaseAdmin.from('delivery_zones').delete().in('id', createdZoneIds);
-      }
-      if (createdAddressIds.length > 0) {
-        await supabaseAdmin.from('addresses').delete().in('id', createdAddressIds);
+        try { await supabaseAdmin.from('delivery_zones').delete().in('id', createdZoneIds); } catch (e) {}
       }
 
       for (const uid of createdUserIds) {
-        await supabaseAdmin.from('profiles').delete().eq('id', uid);
-        await supabaseAdmin.auth.admin.deleteUser(uid);
+        try { await supabaseAdmin.auth.admin.deleteUser(uid); } catch (e) {}
       }
 
       console.log(' [PASS] All temporary test records successfully purged.');
     } catch (cleanErr) {
-      console.warn(' Cleanup warning:', cleanErr.message);
+      console.log(` Cleanup warning: ${cleanErr.message}`);
     }
 
     server.close();

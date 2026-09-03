@@ -17,11 +17,13 @@ export class CartService {
   static async resolveCart(userId, guestToken) {
     if (userId) {
       // 1. Authenticated customer cart
-      let { data: cart } = await supabaseAdmin
+      const { data: carts } = await supabaseAdmin
         .from('carts')
         .select('id, user_id, expires_at, created_at, updated_at')
         .eq('user_id', userId)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
+
+      let cart = carts && carts.length > 0 ? carts[0] : null;
 
       if (!cart) {
         const { data: created, error: createErr } = await supabaseAdmin
@@ -35,6 +37,13 @@ export class CartService {
           throw AppError.internal('Failed to initialize cart');
         }
         cart = created;
+      } else if (carts.length > 1) {
+        // Consolidate items from duplicate carts to the primary cart
+        const duplicateIds = carts.slice(1).map(c => c.id);
+        for (const dup of carts.slice(1)) {
+          await supabaseAdmin.from('cart_items').update({ cart_id: cart.id }).eq('cart_id', dup.id);
+        }
+        await supabaseAdmin.from('carts').delete().in('id', duplicateIds);
       }
 
       return { cart, guestToken: null };
@@ -47,6 +56,8 @@ export class CartService {
         .select('id, session_token, expires_at, created_at, updated_at')
         .eq('session_token', guestToken)
         .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (existingGuestCart) {

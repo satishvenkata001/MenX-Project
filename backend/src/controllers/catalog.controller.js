@@ -24,7 +24,8 @@ export class CatalogController {
    * GET /api/v1/subcategories
    */
   static listSubcategories = asyncHandler(async (req, res) => {
-    const { categoryId, categorySlug } = req.query;
+    const categoryId = req.query.categoryId || req.query.category_id;
+    const categorySlug = req.query.categorySlug || req.query.category_slug;
     const subcategories = await CatalogService.listSubcategories({ categoryId, categorySlug });
     return sendSuccess(res, subcategories, 'Subcategories retrieved successfully');
   });
@@ -41,7 +42,7 @@ export class CatalogController {
    * GET /api/v1/sizes
    */
   static listSizes = asyncHandler(async (req, res) => {
-    const sizes = await CatalogService.listSizes();
+    const sizes = await CatalogService.listSizes(req.query);
     return sendSuccess(res, sizes, 'Sizes retrieved successfully');
   });
 

@@ -38,6 +38,7 @@ router.use(
 router.post('/products', validateRequest(createProductSchema), AdminCatalogController.createProduct);
 router.patch('/products/:id', validateRequest(updateProductSchema), AdminCatalogController.updateProduct);
 router.post('/products/:id/archive', validateRequest(idParamSchema), AdminCatalogController.archiveProduct);
+router.delete('/products/:id', validateRequest(idParamSchema), AdminCatalogController.deleteProduct);
 
 // Variants
 router.post('/products/:id/variants', validateRequest(createVariantSchema), AdminCatalogController.createVariant);
@@ -51,12 +52,15 @@ router.patch('/variants/:id', validateRequest(updateVariantSchema), AdminCatalog
   router.delete('/images/:id', validateRequest(idParamSchema), AdminCatalogController.deleteImage);
 
 // Categories
+router.get('/categories', AdminCatalogController.listCategories);
 router.post('/categories', validateRequest(createCategorySchema), AdminCatalogController.createCategory);
 router.patch('/categories/:id', validateRequest(updateCategorySchema), AdminCatalogController.updateCategory);
+router.delete('/categories/:id', validateRequest(idParamSchema), AdminCatalogController.deleteCategory);
 
 // Subcategories
 router.post('/subcategories', validateRequest(createSubcategorySchema), AdminCatalogController.createSubcategory);
 router.patch('/subcategories/:id', validateRequest(updateSubcategorySchema), AdminCatalogController.updateSubcategory);
+router.delete('/subcategories/:id', validateRequest(idParamSchema), AdminCatalogController.deleteSubcategory);
 
 // Brands
 router.post('/brands', validateRequest(createBrandSchema), AdminCatalogController.createBrand);

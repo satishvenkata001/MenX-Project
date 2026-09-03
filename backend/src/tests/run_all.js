@@ -12,7 +12,9 @@ const testFiles = [
   'test_phase4d.js',
   'test_phase4e.js',
   'return.test.js',
-  'test_phase4g.js'
+  'test_phase4g.js',
+  'test_safe_deletion.js',
+  'variant_stock.test.js'
 ];
 
 async function runTest(file) {
@@ -21,7 +23,13 @@ async function runTest(file) {
     console.log(`RUNNING TEST FILE: ${file}`);
     console.log(`================================================================`);
     
-    const child = fork(path.join(__dirname, file));
+    process.env.NODE_ENV = 'test';
+    const child = fork(path.join(__dirname, file), [], {
+      env: {
+        ...process.env,
+        NODE_ENV: 'test'
+      }
+    });
     
     child.on('close', (code) => {
       if (code === 0) {

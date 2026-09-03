@@ -34,3 +34,24 @@ export const updatePasswordSchema = z.object({
     newPassword: z.string().min(8, 'New password must be at least 8 characters long')
   })
 });
+
+export const exchangeCodeSchema = z.object({
+  body: z.object({
+    code: z.string().min(1, 'Exchange code is required')
+  })
+});
+
+export const verifyOtpSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address format'),
+    token: z.string().length(6, 'Verification code must be exactly 6 digits')
+  })
+});
+
+export const resendOtpSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address format')
+  })
+});
+
+

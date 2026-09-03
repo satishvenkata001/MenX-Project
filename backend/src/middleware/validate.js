@@ -18,6 +18,8 @@ export const validateRequest = (schema) => (req, res, next) => {
         message: issue.message
       }));
 
+      console.error('[VALIDATION ERROR] Request body:', JSON.stringify(req.body, null, 2), 'Errors:', JSON.stringify(formattedErrors, null, 2));
+
       return next(
         AppError.badRequest('Validation failed: Invalid request parameters', formattedErrors)
       );

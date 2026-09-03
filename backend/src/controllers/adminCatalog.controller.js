@@ -158,6 +158,14 @@ export class AdminCatalogController {
   });
 
   /**
+   * GET /api/v1/admin/categories
+   */
+  static listCategories = asyncHandler(async (req, res) => {
+    const categories = await CatalogService.listAdminCategories();
+    return sendSuccess(res, categories, 'Admin categories retrieved successfully');
+  });
+
+  /**
    * POST /api/v1/admin/categories
    */
   static createCategory = asyncHandler(async (req, res) => {
@@ -206,5 +214,56 @@ export class AdminCatalogController {
     const { id } = req.params;
     const brand = await CatalogService.updateBrand(id, req.body, req.token);
     return sendSuccess(res, brand, 'Brand updated successfully');
+  });
+
+  /**
+   * DELETE /api/v1/admin/products/:id or /api/v1/products/:id
+   */
+  static deleteProduct = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const actor = {
+      id: req.user?.id,
+      role: req.profile?.role || req.user?.role || 'SUPER_ADMIN'
+    };
+    const reqInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('user-agent')
+    };
+    const result = await CatalogService.deleteProduct(id, actor, req.token, reqInfo);
+    return sendSuccess(res, result, result.message || 'Product deleted successfully');
+  });
+
+  /**
+   * DELETE /api/v1/admin/categories/:id or /api/v1/categories/:id
+   */
+  static deleteCategory = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const actor = {
+      id: req.user?.id,
+      role: req.profile?.role || req.user?.role || 'SUPER_ADMIN'
+    };
+    const reqInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('user-agent')
+    };
+    const result = await CatalogService.deleteCategory(id, actor, req.token, reqInfo);
+    return sendSuccess(res, result, result.message || 'Category deleted successfully');
+  });
+
+  /**
+   * DELETE /api/v1/admin/subcategories/:id
+   */
+  static deleteSubcategory = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const actor = {
+      id: req.user?.id,
+      role: req.profile?.role || req.user?.role || 'SUPER_ADMIN'
+    };
+    const reqInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('user-agent')
+    };
+    const result = await CatalogService.deleteSubcategory(id, actor, req.token, reqInfo);
+    return sendSuccess(res, result, result.message || 'Subcategory deleted successfully');
   });
 }

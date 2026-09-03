@@ -521,7 +521,7 @@ async function runPhase4DTests() {
       body: JSON.stringify({ variantId: testVariant2.id, quantity: 3 })
     });
     const guestAddData = await guestAddRes.json();
-    await assert('25. Guest adds items using X-Guest-Token', guestAddRes.status === 200 && guestAddData.data.items.length === 1);
+    await assert('25. Guest adds items using X-Guest-Token', guestAddRes.status === 200 && guestAddData.data?.items?.length === 1);
 
     const guestItemId = guestAddData.data.items[0].id;
 
@@ -614,11 +614,19 @@ async function runPhase4DTests() {
     // -------------------------------------------------------------------------
     console.log('\n>>> Cleaning up all temporary test fixtures...');
     try {
-      await supabaseAdmin.from('cart_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('carts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('wishlist_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('wishlists').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabaseAdmin.from('inventory_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (createdVariantIds.length > 0) {
+        await supabaseAdmin.from('inventory_items').delete().in('variant_id', createdVariantIds);
+        await supabaseAdmin.from('cart_items').delete().in('variant_id', createdVariantIds);
+        await supabaseAdmin.from('wishlist_items').delete().in('product_id', createdProductIds);
+      }
+      if (typeof customer1UserId !== 'undefined' && customer1UserId) {
+        await supabaseAdmin.from('carts').delete().eq('user_id', customer1UserId);
+        await supabaseAdmin.from('wishlists').delete().eq('user_id', customer1UserId);
+      }
+      if (typeof customer2UserId !== 'undefined' && customer2UserId) {
+        await supabaseAdmin.from('carts').delete().eq('user_id', customer2UserId);
+        await supabaseAdmin.from('wishlists').delete().eq('user_id', customer2UserId);
+      }
       if (createdVariantIds.length > 0) {
         await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds);
       }

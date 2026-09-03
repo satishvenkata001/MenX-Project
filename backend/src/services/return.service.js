@@ -129,18 +129,64 @@ export class ReturnService {
       // Sort items by orderItemId to prevent deadlocks
       const sortedItems = [...items].sort((a, b) => a.orderItemId.localeCompare(b.orderItemId));
 
-      // 2. Validate and lock order items
-      for (const item of sortedItems) {
-        const orderItemRes = await client.query(
-          'SELECT id, quantity, variant_id FROM order_items WHERE id = $1 AND order_id = $2 FOR UPDATE',
-          [item.orderItemId, orderId]
-        );
+      const orderItemIds = sortedItems.map(i => i.orderItemId);
+      const replacementVariantIds = sortedItems
+        .map(i => i.replacementVariantId)
+        .filter(Boolean);
 
-        if (orderItemRes.rows.length === 0) {
+      // 2a. Batch fetch and lock all relevant order items FOR UPDATE
+      const orderItemsRes = await client.query(
+        'SELECT id, quantity, variant_id FROM order_items WHERE id = ANY($1::uuid[]) AND order_id = $2 ORDER BY id FOR UPDATE',
+        [orderItemIds, orderId]
+      );
+      
+      const orderItemsMap = {};
+      for (const row of orderItemsRes.rows) {
+        orderItemsMap[row.id] = row;
+      }
+
+      // 2b. Batch check for active return requests (status = REQUESTED)
+      const pendingRes = await client.query(
+        `SELECT ri.order_item_id 
+         FROM return_items ri
+         JOIN return_requests rr ON rr.id = ri.return_request_id
+         WHERE ri.order_item_id = ANY($1::uuid[]) AND rr.status = 'REQUESTED'`,
+        [orderItemIds]
+      );
+      const pendingOrderItemIds = new Set(pendingRes.rows.map(row => row.order_item_id));
+
+      // 2c. Batch fetch already returned quantity (excluding cancelled/rejected requests)
+      const returnedRes = await client.query(
+        `SELECT ri.order_item_id, COALESCE(SUM(ri.quantity), 0) AS qty
+         FROM return_items ri
+         JOIN return_requests rr ON rr.id = ri.return_request_id
+         WHERE ri.order_item_id = ANY($1::uuid[]) AND rr.status != 'REJECTED' AND rr.status != 'CANCELLED'
+         GROUP BY ri.order_item_id`,
+        [orderItemIds]
+      );
+      const returnedQtyMap = {};
+      for (const row of returnedRes.rows) {
+        returnedQtyMap[row.order_item_id] = parseInt(row.qty, 10);
+      }
+
+      // 2d. For exchanges, batch validate replacement variants active status
+      const variantsMap = {};
+      if (replacementVariantIds.length > 0) {
+        const variantsRes = await client.query(
+          'SELECT id, is_active FROM product_variants WHERE id = ANY($1::uuid[])',
+          [replacementVariantIds]
+        );
+        for (const row of variantsRes.rows) {
+          variantsMap[row.id] = row.is_active;
+        }
+      }
+
+      // 2e. Validate order items using batched data
+      for (const item of sortedItems) {
+        const orderItem = orderItemsMap[item.orderItemId];
+        if (!orderItem) {
           throw AppError.badRequest(`Order item '${item.orderItemId}' does not belong to this order`);
         }
-
-        const orderItem = orderItemRes.rows[0];
 
         // Check variant_id matches
         if (orderItem.variant_id !== item.variantId) {
@@ -148,27 +194,12 @@ export class ReturnService {
         }
 
         // Check if there is already a pending return request (status = REQUESTED) for this order item
-        const pendingRes = await client.query(
-          `SELECT 1 FROM return_items ri
-           JOIN return_requests rr ON rr.id = ri.return_request_id
-           WHERE ri.order_item_id = $1 AND rr.status = 'REQUESTED'`,
-          [item.orderItemId]
-        );
-
-        if (pendingRes.rows.length > 0) {
+        if (pendingOrderItemIds.has(item.orderItemId)) {
           throw AppError.badRequest(`An active return request is already pending for order item '${item.orderItemId}'`);
         }
 
         // Calculate already returned quantity (excluding cancelled/rejected requests)
-        const returnedRes = await client.query(
-          `SELECT COALESCE(SUM(ri.quantity), 0) AS qty
-           FROM return_items ri
-           JOIN return_requests rr ON rr.id = ri.return_request_id
-           WHERE ri.order_item_id = $1 AND rr.status != 'REJECTED' AND rr.status != 'CANCELLED'`,
-          [item.orderItemId]
-        );
-
-        const alreadyReturned = parseInt(returnedRes.rows[0].qty, 10);
+        const alreadyReturned = returnedQtyMap[item.orderItemId] || 0;
         const remainingQuantity = orderItem.quantity - alreadyReturned;
 
         if (item.quantity > remainingQuantity) {
@@ -183,12 +214,8 @@ export class ReturnService {
             throw AppError.badRequest('Replacement variant ID is required for exchange requests');
           }
 
-          const variantRes = await client.query(
-            'SELECT is_active FROM product_variants WHERE id = $1',
-            [item.replacementVariantId]
-          );
-
-          if (variantRes.rows.length === 0 || !variantRes.rows[0].is_active) {
+          const is_active = variantsMap[item.replacementVariantId];
+          if (is_active === undefined || !is_active) {
             throw AppError.badRequest(`Selected replacement variant is invalid or inactive`);
           }
         }

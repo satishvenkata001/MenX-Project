@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import http from 'http';
 import app from '../app.js';
 import { supabaseAdmin } from '../config/supabase.js';
@@ -92,6 +93,9 @@ async function runPhase4ATests() {
     await assert('User registration returns HTTP 201 Created', signupRes.status === 201, JSON.stringify(signupData));
     await assert('Registered user ID returned', !!signupData.data?.user?.id);
     testUserId = signupData.data?.user?.id;
+
+    // Confirm user email administratively to allow login in automated test
+    await supabaseAdmin.auth.admin.updateUserById(testUserId, { email_confirm: true });
 
     // TEST 5: User Login Flow with Supabase Auth
     console.log('\n>>> 5. User Login & Token Generation');
