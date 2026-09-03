@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useWishlist } from '../context/WishlistContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
-import { Menu, X, User, ShoppingBag, Heart, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { Menu, X, User, ShoppingBag, Heart, LogOut, LayoutDashboard, Shield, Package, RotateCcw, ShoppingCart } from 'lucide-react';
 
 export default function BaseLayout({ children }) {
   const { user, logout, isAdminOrStaff, isAuthenticated } = useAuth();
@@ -11,6 +11,8 @@ export default function BaseLayout({ children }) {
   const { cart } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const path = location.pathname;
 
   const handleLogout = () => {
     logout();
@@ -18,7 +20,7 @@ export default function BaseLayout({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col w-full max-w-full overflow-x-hidden">
       {/* Navigation Header */}
       <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -74,7 +76,7 @@ export default function BaseLayout({ children }) {
             <div className="hidden md:flex items-center space-x-6">
               {isAuthenticated ? (
                 <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2 text-sm text-gray-300">
+                  <Link to="/profile" className="flex items-center space-x-2 text-sm text-gray-300 hover:text-amber-500 transition-colors duration-200">
                     <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-amber-500 font-semibold shadow-inner">
                       {user.first_name ? user.first_name[0].toUpperCase() : 'U'}
                     </div>
@@ -85,7 +87,7 @@ export default function BaseLayout({ children }) {
                         STAFF
                       </span>
                     )}
-                  </div>
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="p-2 hover:bg-red-500/10 text-gray-400 hover:text-red-500 rounded-full transition-colors duration-200"
@@ -119,102 +121,185 @@ export default function BaseLayout({ children }) {
 
         {/* Mobile Navigation Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-gray-900 border-b border-gray-800 px-4 pt-2 pb-4 space-y-2 text-sm font-medium">
-            <Link
-              to="/"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
-            >
-              Shop
-            </Link>
-            {isAuthenticated && (
-              <>
+          <div className="md:hidden bg-gray-900 border-b border-gray-800 px-4 py-6 space-y-5 text-sm font-medium z-50">
+            
+            {/* PROFILE SECTION */}
+            <div className="bg-gray-950/40 border border-gray-850 p-4 rounded-xl flex items-center space-x-3 shadow-inner">
+              {isAuthenticated ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-amber-500/20 flex items-center justify-center text-amber-500 text-lg font-bold shadow-md shrink-0">
+                    {user.first_name ? user.first_name[0].toUpperCase() : 'U'}
+                  </div>
+                  <div className="min-w-0 flex-grow">
+                    <div className="font-bold text-gray-100 truncate text-sm">
+                      {user.first_name} {user.last_name || ''}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate font-mono">{user.email}</div>
+                    <Link
+                      to="/profile"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-[10px] text-amber-500 hover:text-amber-400 font-bold tracking-wider mt-1 block uppercase"
+                    >
+                      View Profile
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-gray-400 text-lg font-bold shadow-md shrink-0">
+                    ?
+                  </div>
+                  <div className="min-w-0 flex-grow">
+                    <div className="font-bold text-gray-300 text-sm">Welcome Guest</div>
+                    <div className="text-xs text-gray-500">Sign in to check out faster</div>
+                    <Link
+                      to="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-[10px] text-amber-500 hover:text-amber-400 font-bold tracking-wider mt-1 block uppercase"
+                    >
+                      Sign In Now
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* SHOPPING SECTION */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-gray-500 tracking-widest uppercase px-3 block">
+                Shopping
+              </span>
+              <Link
+                to="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center space-x-3 py-2 px-3 rounded-lg transition-all duration-200 group ${
+                  path === '/'
+                    ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                    : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className={`w-4 h-4 transition-colors duration-200 ${path === '/' ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                <span>Shop</span>
+              </Link>
+              {isAuthenticated && (
                 <Link
                   to="/orders"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+                  className={`flex items-center space-x-3 py-2 px-3 rounded-lg transition-all duration-200 group ${
+                    path === '/orders' || path.startsWith('/orders/')
+                      ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                      : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                  }`}
                 >
-                  Orders
+                  <Package className={`w-4 h-4 transition-colors duration-200 ${path === '/orders' || path.startsWith('/orders/') ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                  <span>Orders</span>
                 </Link>
+              )}
+            </div>
+
+            {/* HELP SECTION */}
+            {isAuthenticated && (
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-gray-500 tracking-widest uppercase px-3 block">
+                  Help
+                </span>
                 <Link
                   to="/returns"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+                  className={`flex items-center space-x-3 py-2 px-3 rounded-lg transition-all duration-200 group ${
+                    path === '/returns' || path.startsWith('/returns/')
+                      ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                      : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                  }`}
                 >
-                  Returns & Exchanges
+                  <RotateCcw className={`w-4 h-4 transition-colors duration-200 ${path === '/returns' || path.startsWith('/returns/') ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                  <span>Returns & Exchanges</span>
                 </Link>
-              </>
+              </div>
             )}
-            <Link
-              to="/cart"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
-            >
-              <ShoppingBag className="w-4 h-4 text-amber-500" />
-              <span>Cart</span>
-              {cart?.summary?.totalQuantity > 0 && (
-                <span className="bg-amber-500 text-black text-[10px] font-extrabold rounded-full px-1.5 min-w-[16px] h-4 flex items-center justify-center">
-                  {cart.summary.totalQuantity}
-                </span>
-              )}
-            </Link>
-            {isAuthenticated && (
+
+            {/* MY ITEMS SECTION */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-gray-500 tracking-widest uppercase px-3 block">
+                My Items
+              </span>
               <Link
-                to="/wishlist"
+                to="/cart"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
+                className={`flex items-center justify-between py-2 px-3 rounded-lg transition-all duration-200 group ${
+                  path === '/cart'
+                    ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                    : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                }`}
               >
-                <Heart className="w-4 h-4 text-red-500 fill-red-500" />
-                <span>Wishlist</span>
-                {wishlist.length > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                    {wishlist.length}
+                <div className="flex items-center space-x-3">
+                  <ShoppingCart className={`w-4 h-4 transition-colors duration-200 ${path === '/cart' ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                  <span>Cart</span>
+                </div>
+                {cart?.summary?.totalQuantity > 0 && (
+                  <span className="bg-amber-500 text-black text-[10px] font-extrabold rounded-full px-2 py-0.5 h-4.5 flex items-center justify-center">
+                    {cart.summary.totalQuantity}
                   </span>
                 )}
               </Link>
-            )}
+              {isAuthenticated && (
+                <Link
+                  to="/wishlist"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between py-2 px-3 rounded-lg transition-all duration-200 group ${
+                    path === '/wishlist'
+                      ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                      : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <Heart className={`w-4 h-4 transition-colors duration-200 ${path === '/wishlist' ? 'text-amber-500 fill-amber-500/10' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                    <span>Wishlist</span>
+                  </div>
+                  {wishlist.length > 0 && (
+                    <span className="bg-red-500/20 text-red-400 text-[10px] font-bold rounded-full px-2 py-0.5 h-4.5 flex items-center justify-center border border-red-500/20">
+                      {wishlist.length}
+                    </span>
+                  )}
+                </Link>
+              )}
+            </div>
+
+            {/* ACCOUNT SECTION (ADMIN ONLY) */}
             {isAdminOrStaff && (
-              <Link
-                to="/admin"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-gray-800 text-gray-300 hover:text-amber-500 transition-colors"
-              >
-                <LayoutDashboard className="w-4 h-4 text-amber-500" />
-                <span>Admin Dashboard</span>
-              </Link>
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-gray-500 tracking-widest uppercase px-3 block">
+                  Account
+                </span>
+                <Link
+                  to="/admin"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center space-x-3 py-2 px-3 rounded-lg transition-all duration-200 group ${
+                    path === '/admin'
+                      ? 'bg-amber-500/10 border-l-2 border-amber-500 text-white font-bold'
+                      : 'text-gray-400 hover:bg-gray-850 hover:text-white'
+                  }`}
+                >
+                  <LayoutDashboard className={`w-4 h-4 transition-colors duration-200 ${path === '/admin' ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500'}`} />
+                  <span>Admin Dashboard</span>
+                </Link>
+              </div>
             )}
-            <hr className="border-gray-800 my-2" />
-            {isAuthenticated ? (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2 px-3 py-1">
-                  <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-amber-500 font-semibold border border-gray-700">
-                    {user.first_name ? user.first_name[0].toUpperCase() : 'U'}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-200">{user.first_name} {user.last_name || ''}</div>
-                    <div className="text-xs text-gray-400">{user.email}</div>
-                  </div>
-                </div>
+
+            {/* SIGN OUT SECTION */}
+            {isAuthenticated && (
+              <div className="pt-3 border-t border-gray-800">
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
                     handleLogout();
                   }}
-                  className="flex items-center space-x-2 w-full text-left px-3 py-2 rounded-md hover:bg-red-500/10 text-red-400 transition-colors"
+                  className="flex items-center space-x-3 w-full text-left py-2 px-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors duration-200"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Sign Out</span>
                 </button>
               </div>
-            ) : (
-              <Link
-                to="/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-center space-x-2 w-full py-2 px-4 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors"
-              >
-                <User className="w-4 h-4" />
-                <span>Sign In</span>
-              </Link>
             )}
           </div>
         )}

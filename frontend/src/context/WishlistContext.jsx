@@ -7,6 +7,7 @@ const WishlistContext = createContext(null);
 export function WishlistProvider({ children }) {
   const { isAuthenticated } = useAuth();
   const [wishlist, setWishlist] = useState([]);
+  const [deletingIds, setDeletingIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -50,19 +51,35 @@ export function WishlistProvider({ children }) {
 
   async function removeFromWishlist(productId) {
     if (!isAuthenticated) return;
+    if (deletingIds.includes(productId)) return;
+
+    setDeletingIds(prev => [...prev, productId]);
     setError(null);
+    const previousWishlist = wishlist;
+
+    // Optimistically update UI
+    setWishlist(prev => prev.filter(item => 
+      item.productId !== productId && 
+      item.product_id !== productId && 
+      item.product?.id !== productId
+    ));
+
     try {
       await api.delete(`/wishlist/items/${productId}`);
       await loadWishlist();
     } catch (err) {
       console.error('Failed to remove from wishlist:', err.message);
       setError(err.message);
+      // Rollback to previous state on error
+      setWishlist(previousWishlist);
       throw err;
+    } finally {
+      setDeletingIds(prev => prev.filter(id => id !== productId));
     }
   }
 
   function isInWishlist(productId) {
-    return wishlist.some(item => item.product_id === productId || item.product?.id === productId);
+    return wishlist.some(item => item.productId === productId || item.product_id === productId || item.product?.id === productId);
   }
 
   const value = {

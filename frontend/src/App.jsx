@@ -5,9 +5,11 @@ import { WishlistProvider } from './context/WishlistContext.jsx';
 import { CartProvider } from './context/CartContext.jsx';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import ProductDetail from './pages/ProductDetail.jsx';
 import Wishlist from './pages/Wishlist.jsx';
 import Cart from './pages/Cart.jsx';
+import Profile from './pages/Profile.jsx';
 import Checkout from './pages/Checkout.jsx';
 import OrderSuccess from './pages/OrderSuccess.jsx';
 import OrderHistory from './pages/OrderHistory.jsx';
@@ -18,17 +20,20 @@ import ReturnDetails from './pages/ReturnDetails.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <WishlistProvider>
-          <CartProvider>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <WishlistProvider>
+            <CartProvider>
             <Routes>
               {/* Public customer routes */}
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/products/:slug" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />
 
@@ -42,6 +47,14 @@ export default function App() {
                 }
               />
               <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/checkout"
                 element={
                   <ProtectedRoute>
@@ -50,7 +63,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/order-success"
+                path="/order-success/:orderId"
                 element={
                   <ProtectedRoute>
                     <OrderSuccess />
@@ -115,5 +128,6 @@ export default function App() {
         </WishlistProvider>
       </AuthProvider>
     </BrowserRouter>
+  </ErrorBoundary>
   );
 }

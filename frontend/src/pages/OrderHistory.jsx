@@ -3,6 +3,7 @@ import { api } from '../utils/api.js';
 import { Calendar, Package, ArrowRight, ShoppingBag, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency } from '../utils/formatters.js';
 
 export default function OrderHistory() {
   const [orders, setOrders] = useState([]);
@@ -134,7 +135,7 @@ export default function OrderHistory() {
                 <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-gray-850 pt-4 md:pt-0">
                   <div className="text-left md:text-right">
                     <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Total Amount</div>
-                    <div className="text-xl font-black text-amber-500">₹{order.total_payable}</div>
+                    <div className="text-xl font-black text-amber-500">{formatCurrency(order.total_payable)}</div>
                   </div>
                   
                   <Link

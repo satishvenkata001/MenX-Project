@@ -3,6 +3,7 @@ import { useCart } from '../context/CartContext.jsx';
 import { ShoppingBag, Trash2, Plus, Minus, AlertTriangle, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency } from '../utils/formatters.js';
 
 export default function Cart() {
   const { cart, loading, error, updateQuantity, removeFromCart, clearCart } = useCart();
@@ -47,11 +48,7 @@ export default function Cart() {
 
   const handleCheckout = () => {
     if (!cart?.summary?.isValidForCheckout) return;
-    setCheckoutSuccess(true);
-    setTimeout(() => {
-      setCheckoutSuccess(false);
-      alert('Checkout process initiated! In a production app, you would proceed to payment and address entry here.');
-    }, 2000);
+    navigate('/checkout');
   };
 
   const hasItems = cart && cart.items && cart.items.length > 0;
@@ -210,15 +207,15 @@ export default function Cart() {
                         {/* Unit & Line Pricing */}
                         <div className="flex items-baseline space-x-2">
                           <span className="text-sm font-bold text-gray-200">
-                            ₹{item.unitPrice}
+                            {formatCurrency(item.unitPrice)}
                           </span>
                           {item.mrp > item.unitPrice && (
                             <span className="text-xs text-gray-500 line-through">
-                              ₹{item.mrp}
+                              {formatCurrency(item.mrp)}
                             </span>
                           )}
                           <span className="text-xs text-gray-400 ml-2 font-mono">
-                            (Total: ₹{item.lineTotal})
+                            (Total: {formatCurrency(item.lineTotal)})
                           </span>
                         </div>
 
@@ -259,13 +256,13 @@ export default function Cart() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between text-gray-400">
                   <span>Price ({cart.summary.totalQuantity} items)</span>
-                  <span>₹{cart.summary.mrpSubtotal}</span>
+                  <span>{formatCurrency(cart.summary.mrpSubtotal)}</span>
                 </div>
                 
                 {cart.summary.totalDiscount > 0 && (
                   <div className="flex justify-between text-green-400">
                     <span>Discount on MRP</span>
-                    <span>-₹{cart.summary.totalDiscount}</span>
+                    <span>-{formatCurrency(cart.summary.totalDiscount)}</span>
                   </div>
                 )}
                 
@@ -276,7 +273,7 @@ export default function Cart() {
 
                 <div className="border-t border-gray-800 pt-4 flex justify-between text-base font-extrabold text-white">
                   <span>Total Amount</span>
-                  <span className="text-amber-500">₹{cart.summary.subtotal}</span>
+                  <span className="text-amber-500">{formatCurrency(cart.summary.subtotal)}</span>
                 </div>
               </div>
 

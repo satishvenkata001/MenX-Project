@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext.jsx';
 import { api } from '../utils/api.js';
-import { MapPin, Plus, Percent, CreditCard, Sparkles, Check, ChevronRight, X, AlertCircle } from 'lucide-react';
+import { MapPin, Plus, Percent, CreditCard, Sparkles, Check, ChevronRight, X, AlertCircle, ShoppingBag } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency } from '../utils/formatters.js';
 
 export default function Checkout() {
   const { cart, refreshCart } = useCart();
@@ -79,10 +80,13 @@ export default function Checkout() {
       setValidating(true);
       setValidationError(null);
       try {
-        const res = await api.post('/checkout/validate', {
-          addressId: selectedAddressId,
-          couponCode: activeCoupon || null
-        });
+        const payload = {
+          addressId: selectedAddressId
+        };
+        if (activeCoupon && activeCoupon.trim()) {
+          payload.couponCode = activeCoupon.trim();
+        }
+        const res = await api.post('/checkout/validate', payload);
         setValidationResult(res.data);
       } catch (err) {
         setValidationError(err.message || 'Checkout validation failed');
@@ -169,18 +173,25 @@ export default function Checkout() {
     setSubmitting(true);
     setOrderError(null);
     try {
-      const res = await api.post('/orders', {
+      const payload = {
         addressId: selectedAddressId,
-        couponCode: activeCoupon || null,
-        customerNotes: customerNotes || null,
         paymentMethod: 'COD'
-      });
+      };
+      if (activeCoupon && activeCoupon.trim()) {
+        payload.couponCode = activeCoupon.trim();
+      }
+      if (customerNotes && customerNotes.trim()) {
+        payload.customerNotes = customerNotes.trim();
+      }
+
+      const res = await api.post('/orders', payload);
       
       // Refresh cart to empty state
       await refreshCart();
       
       // Redirect to success view
-      navigate(`/order-success?orderId=${res.data.id || res.data.orderId || res.data.order?.id}`);
+      const createdOrderId = res.data.order_id || res.data.orderId || res.data.id || res.data.order?.id;
+      navigate(`/order-success/${createdOrderId}`);
     } catch (err) {
       setOrderError(err.message || 'Order creation failed');
     } finally {
@@ -386,34 +397,67 @@ export default function Checkout() {
               )}
             </div>
 
-            {/* Totals Summary Card */}
+            {/* Order Summary & Totals */}
             <div className="bg-gray-900 border border-gray-850 rounded-2xl p-6 space-y-6 shadow-md">
-              <h3 className="text-base font-bold text-white tracking-tight border-b border-gray-800 pb-3">Checkout Summary</h3>
+              <h3 className="text-base font-bold text-white tracking-tight border-b border-gray-800 pb-3">Order Summary</h3>
+              
+              {/* Cart Items List */}
+              <div className="divide-y divide-gray-850 max-h-[300px] overflow-y-auto pr-1 space-y-3">
+                {cart && cart.items && cart.items.map((item) => (
+                  <div key={item.id} className="pt-3 first:pt-0 flex gap-3 text-xs">
+                    {/* Thumbnail */}
+                    <div className="w-14 h-14 bg-gray-950 border border-gray-855 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      {item.thumbnailUrl ? (
+                        <img src={item.thumbnailUrl} alt={item.productTitle} className="w-full h-full object-cover" />
+                      ) : (
+                        <ShoppingBag className="w-5 h-5 text-gray-700" />
+                      )}
+                    </div>
+                    {/* Metadata */}
+                    <div className="flex-grow min-w-0 space-y-1">
+                      <h4 className="font-bold text-white truncate">{item.productTitle}</h4>
+                      <div className="text-[10px] text-gray-400 flex flex-wrap gap-x-2">
+                        {item.size && <span>Size: {item.size}</span>}
+                        {item.color && <span>Color: {item.color}</span>}
+                        <span>Qty: {item.quantity}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] pt-0.5">
+                        <span className="text-gray-400">{formatCurrency(item.unitPrice)} each</span>
+                        <span className="font-bold text-amber-500 font-mono">{formatCurrency(item.lineTotal)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <hr className="border-gray-850" />
+
+              <h3 className="text-base font-bold text-white tracking-tight border-b border-gray-800 pb-2">Checkout Totals</h3>
 
               {validating ? (
-                <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-amber-500"></div>
-                  <span className="text-xs text-gray-500">Validating checkout totals...</span>
+                <div className="py-8 flex flex-col items-center justify-center space-y-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-amber-500"></div>
+                  <span className="text-[10px] text-gray-500">Validating checkout totals...</span>
                 </div>
               ) : validationError ? (
                 <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-center space-y-2">
-                  <AlertCircle className="w-8 h-8 mx-auto" />
-                  <p className="text-sm font-bold">Shipping Delivery Blocked</p>
-                  <p className="text-xs text-gray-400 leading-relaxed">
+                  <AlertCircle className="w-6 h-6 mx-auto" />
+                  <p className="text-xs font-bold">Shipping Delivery Blocked</p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
                     {validationError}
                   </p>
                 </div>
               ) : validationResult ? (
                 <div className="space-y-4">
-                  <div className="space-y-3 text-sm">
+                  <div className="space-y-3 text-xs">
                     <div className="flex justify-between text-gray-400">
                       <span>Order Subtotal</span>
-                      <span>₹{validationResult.subtotal}</span>
+                      <span>{formatCurrency(validationResult.subtotal)}</span>
                     </div>
                     {validationResult.discount > 0 && (
                       <div className="flex justify-between text-green-400">
                         <span>Coupon Savings</span>
-                        <span>-₹{validationResult.discount}</span>
+                        <span>-{formatCurrency(validationResult.discount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-gray-400">
@@ -421,12 +465,12 @@ export default function Checkout() {
                       {validationResult.deliveryFee === 0 ? (
                         <span className="text-green-400 font-bold">FREE</span>
                       ) : (
-                        <span>₹{validationResult.deliveryFee}</span>
+                        <span>{formatCurrency(validationResult.deliveryFee)}</span>
                       )}
                     </div>
-                    <div className="border-t border-gray-800 pt-4 flex justify-between text-lg font-black text-white">
+                    <div className="border-t border-gray-800 pt-4 flex justify-between text-base font-black text-white">
                       <span>Total Payable</span>
-                      <span className="text-amber-500">₹{validationResult.total}</span>
+                      <span className="text-amber-500 font-mono">{formatCurrency(validationResult.total)}</span>
                     </div>
                   </div>
 
@@ -434,7 +478,7 @@ export default function Checkout() {
 
                   {/* Order Error */}
                   {orderError && (
-                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-lg text-center">
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-lg text-center font-bold">
                       {orderError}
                     </div>
                   )}
@@ -443,7 +487,7 @@ export default function Checkout() {
                   <button
                     disabled={submitting}
                     onClick={handlePlaceOrder}
-                    className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-850 disabled:text-gray-500 text-black font-extrabold rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 text-sm shadow-lg shadow-amber-500/5 uppercase tracking-wider"
+                    className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-850 disabled:text-gray-500 text-black font-extrabold rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 text-sm shadow-lg shadow-amber-500/5 uppercase tracking-wider"
                   >
                     {submitting ? (
                       <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-black" />
@@ -456,7 +500,7 @@ export default function Checkout() {
                   </button>
                 </div>
               ) : (
-                <div className="py-6 text-center text-xs text-gray-500">
+                <div className="py-4 text-center text-xs text-gray-500">
                   Select a delivery address to calculate totals.
                 </div>
               )}

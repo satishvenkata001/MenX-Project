@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../utils/api.js';
-import { Package, Calendar, MapPin, Truck, HelpCircle, ArrowLeft, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Package, Calendar, MapPin, Truck, HelpCircle, ArrowLeft, Check, AlertTriangle, Clock, X } from 'lucide-react';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency } from '../utils/formatters.js';
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -15,6 +16,10 @@ export default function OrderDetails() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [selectedReasonOpt, setSelectedReasonOpt] = useState('Changed my mind');
+  const [customReasonText, setCustomReasonText] = useState('');
+  const [cancelError, setCancelError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // Load details and status history
   async function loadOrderDetails() {
@@ -29,7 +34,8 @@ export default function OrderDetails() {
       setStatusHistory(historyRes.data || []);
     } catch (err) {
       console.error('Failed to load order details:', err.message);
-      setError(err.message);
+      const msg = err.response?.data?.message || err.message || 'Failed to load order details';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -41,19 +47,27 @@ export default function OrderDetails() {
 
   const handleCancelOrder = async (e) => {
     e.preventDefault();
-    if (!cancelReason.trim()) {
-      alert('Please enter a cancellation reason.');
+    const reasonToSend = selectedReasonOpt === 'Other' ? customReasonText : selectedReasonOpt;
+    if (!reasonToSend.trim()) {
+      setCancelError('Please specify a cancellation reason.');
       return;
     }
 
     setCancelling(true);
+    setCancelError(null);
     try {
-      await api.post(`/orders/${orderId}/cancel`, { reason: cancelReason });
+      await api.post(`/orders/${orderId}/cancel`, { reason: reasonToSend });
       setShowCancelModal(false);
-      setCancelReason('');
+      setSelectedReasonOpt('Changed my mind');
+      setCustomReasonText('');
+      setSuccessMessage('Order cancelled successfully.');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
       await loadOrderDetails(); // Reload details to show updated cancelled state
     } catch (err) {
-      alert(err.message || 'Failed to cancel order');
+      const msg = err.response?.data?.message || err.message || 'Failed to cancel order';
+      setCancelError(msg);
     } finally {
       setCancelling(false);
     }
@@ -82,6 +96,9 @@ export default function OrderDetails() {
 
   // Status timeline definition
   const statuses = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+  const timelineStatuses = order && order.order_status === 'CANCELLED'
+    ? ['PENDING', ...(statusHistory.some(h => h.to_status === 'CONFIRMED') ? ['CONFIRMED'] : []), 'CANCELLED']
+    : ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
   // Check if a status transition was completed and fetch the timestamp
   const getStatusEvent = (statusName) => {
@@ -102,6 +119,21 @@ export default function OrderDetails() {
           <ArrowLeft className="w-4 h-4" />
           <span>Back to orders</span>
         </Link>
+
+        {successMessage && (
+          <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl flex items-center justify-between shadow-md">
+            <div className="flex items-center space-x-2">
+              <Check className="w-5 h-5 text-green-400" />
+              <span className="text-sm font-medium">{successMessage}</span>
+            </div>
+            <button
+              onClick={() => setSuccessMessage(null)}
+              className="text-green-400 hover:text-green-300 text-xs font-bold uppercase tracking-wider"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Loading / Error States */}
         {loading ? (
@@ -136,11 +168,20 @@ export default function OrderDetails() {
 
               {isCancelable && (
                 <button
-                  onClick={() => setShowCancelModal(true)}
+                  onClick={() => {
+                    setCancelError(null);
+                    setShowCancelModal(true);
+                  }}
                   className="py-2.5 px-5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/30 rounded-xl text-xs font-bold transition-all duration-150 uppercase tracking-wider"
                 >
                   Cancel Order
                 </button>
+              )}
+
+              {order.order_status === 'CANCELLED' && (
+                <span className="py-2.5 px-5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold uppercase tracking-wider select-none">
+                  ORDER CANCELLED
+                </span>
               )}
 
               {order.order_status === 'DELIVERED' && (
@@ -154,7 +195,7 @@ export default function OrderDetails() {
             </div>
 
             {/* Visual Status Timeline Progress Tracker */}
-            {order.order_status !== 'CANCELLED' && (
+            {order && (
               <div className="bg-gray-900 border border-gray-850 rounded-2xl p-6 shadow-md space-y-6">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
                   <Clock className="w-4 h-4 text-amber-500 mr-1.5" />
@@ -165,13 +206,15 @@ export default function OrderDetails() {
                   {/* Progress Line */}
                   <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-850 -z-10 hidden md:block" />
 
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-6 relative">
-                    {statuses.map((statusName, idx) => {
+                  <div className={`grid grid-cols-1 ${
+                    timelineStatuses.length === 2 ? 'md:grid-cols-2' : timelineStatuses.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-6'
+                  } gap-6 relative`}>
+                    {timelineStatuses.map((statusName, idx) => {
                       const event = getStatusEvent(statusName);
                       const isCompleted = !!event || order.order_status === statusName;
                       
                       // Check if previous step completed to style connectives
-                      const currentStatusIdx = statuses.indexOf(order.order_status);
+                      const currentStatusIdx = timelineStatuses.indexOf(order.order_status);
                       const isActive = isCompleted || idx <= currentStatusIdx;
 
                       return (
@@ -244,9 +287,9 @@ export default function OrderDetails() {
                         </div>
 
                         <div className="text-right text-sm">
-                          <div className="font-bold text-white">₹{item.line_total}</div>
+                          <div className="font-bold text-white">{formatCurrency(item.line_total)}</div>
                           <div className="text-xs text-gray-400 font-mono">
-                            ₹{item.unit_price_snapshot} x {item.quantity}
+                            {formatCurrency(item.unit_price_snapshot)} x {item.quantity}
                           </div>
                         </div>
                       </div>
@@ -296,21 +339,21 @@ export default function OrderDetails() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-gray-400 text-xs">
                       <span>Subtotal</span>
-                      <span>₹{order.subtotal_amount}</span>
+                      <span>{formatCurrency(order.subtotal_amount)}</span>
                     </div>
                     {Number(order.discount_amount) > 0 && (
                       <div className="flex justify-between text-green-400 text-xs">
                         <span>Coupon Savings</span>
-                        <span>-₹{order.discount_amount}</span>
+                        <span>-{formatCurrency(order.discount_amount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-gray-400 text-xs">
                       <span>Delivery Fee</span>
-                      <span>₹{order.delivery_fee}</span>
+                      <span>{formatCurrency(order.delivery_fee)}</span>
                     </div>
                     <div className="border-t border-gray-800 pt-3 flex justify-between text-sm font-extrabold text-white">
-                      <span>Total Paid (COD)</span>
-                      <span className="text-amber-500 font-black">₹{order.total_payable}</span>
+                      <span>Total Payable</span>
+                      <span className="text-amber-500 font-black">{formatCurrency(order.total_payable)}</span>
                     </div>
                   </div>
 
@@ -337,40 +380,98 @@ export default function OrderDetails() {
           <div className="relative w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-6">
             
             <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Cancel Your Order</h3>
+              <h3 className="text-lg font-bold text-white">Cancel Order?</h3>
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="p-1 rounded-lg border border-gray-800 text-gray-400 hover:text-white"
+                className="p-1 rounded-lg border border-gray-800 text-gray-404 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            <p className="text-sm text-gray-400">
+              Are you sure you want to cancel this order?
+            </p>
+
             <form onSubmit={handleCancelOrder} className="space-y-4 text-sm">
-              <div className="space-y-2">
-                <label className="text-xs text-gray-400 font-bold uppercase">Reason for cancellation *</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="Tell us why you would like to cancel this order..."
-                  className="w-full bg-gray-950 border border-gray-850 rounded-xl p-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-medium"
-                />
+              <div className="space-y-3">
+                <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Cancellation reason</label>
+                <div className="space-y-2">
+                  {[
+                    'Changed my mind',
+                    'Ordered by mistake',
+                    'Found a better price',
+                    'Delivery is taking too long',
+                    'Other'
+                  ].map((opt) => (
+                    <label
+                      key={opt}
+                      className={`flex items-center space-x-3 p-3 rounded-xl border cursor-pointer transition-all duration-150 ${
+                        selectedReasonOpt === opt
+                          ? 'bg-amber-500/10 border-amber-500/40 text-white'
+                          : 'bg-gray-950/50 border-gray-850/80 text-gray-400 hover:text-white hover:border-gray-800'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancelReason"
+                        value={opt}
+                        checked={selectedReasonOpt === opt}
+                        onChange={() => {
+                          setSelectedReasonOpt(opt);
+                          setCancelError(null);
+                        }}
+                        className="sr-only"
+                      />
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                        selectedReasonOpt === opt ? 'border-amber-500' : 'border-gray-600'
+                      }`}>
+                        {selectedReasonOpt === opt && (
+                          <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        )}
+                      </div>
+                      <span className="text-sm font-medium">{opt}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+
+              {selectedReasonOpt === 'Other' && (
+                <div className="space-y-1.5 animate-fadeIn">
+                  <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Please specify *</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={customReasonText}
+                    onChange={(e) => {
+                      setCustomReasonText(e.target.value);
+                      setCancelError(null);
+                    }}
+                    placeholder="Type your cancellation reason here..."
+                    className="w-full bg-gray-950 border border-gray-850 rounded-xl p-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-medium"
+                  />
+                </div>
+              )}
+
+              {cancelError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl flex items-start space-x-2 text-xs">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{cancelError}</span>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
                 <button
                   type="button"
                   onClick={() => setShowCancelModal(false)}
-                  className="py-2 px-4 border border-gray-800 hover:bg-gray-800 rounded-lg text-xs font-bold text-gray-400 hover:text-white"
+                  className="py-2.5 px-4 border border-gray-800 hover:bg-gray-800 rounded-xl text-xs font-bold text-gray-400 hover:text-white transition-colors"
                 >
-                  Close
+                  Keep Order
                 </button>
                 <button
                   type="submit"
                   disabled={cancelling}
-                  className="py-2 px-4 bg-red-500 hover:bg-red-600 disabled:bg-gray-800 text-white text-xs font-extrabold rounded-lg flex items-center space-x-1"
+                  className="py-2.5 px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-850 text-white text-xs font-extrabold rounded-xl flex items-center space-x-1 transition-colors"
                 >
                   {cancelling && <div className="animate-spin rounded-full h-3 w-3 border-t border-white mr-1" />}
                   <span>Cancel Order</span>

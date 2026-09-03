@@ -15,7 +15,12 @@ export function AuthProvider({ children }) {
       if (token) {
         try {
           const res = await api.get('/auth/me');
-          setUser(res.data);
+          if (res.data) {
+            setUser({
+              ...res.data.user,
+              ...res.data.profile
+            });
+          }
         } catch (err) {
           console.error('Failed to load user profile on init:', err.message);
           api.setToken(null);
@@ -35,7 +40,12 @@ export function AuthProvider({ children }) {
       api.setToken(sessionData.session?.accessToken);
       
       const profileRes = await api.get('/auth/me');
-      setUser(profileRes.data);
+      if (profileRes.data) {
+        setUser({
+          ...profileRes.data.user,
+          ...profileRes.data.profile
+        });
+      }
 
       // Safe guest-to-authenticated cart merging
       const guestToken = localStorage.getItem('menx_guest_token');
@@ -70,10 +80,9 @@ export function AuthProvider({ children }) {
         phone: phone || null
       };
 
-      await api.post('/auth/signup', payload);
-      
-      // Auto login after registration
-      return await login(email, password);
+      const res = await api.post('/auth/signup', payload);
+      setLoading(false);
+      return res.data;
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -86,6 +95,25 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  async function refreshUser() {
+    const token = api.getToken();
+    if (token) {
+      try {
+        const res = await api.get('/auth/me');
+        if (res.data) {
+          setUser({
+            ...res.data.user,
+            ...res.data.profile
+          });
+          return res.data;
+        }
+      } catch (err) {
+        console.error('Failed to refresh user profile:', err.message);
+      }
+    }
+    return null;
+  }
+
   const value = {
     user,
     loading,
@@ -93,6 +121,7 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
+    refreshUser,
     isAuthenticated: !!user,
     isAdminOrStaff: user && ['SUPER_ADMIN', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'STORE_STAFF'].includes(user.role)
   };

@@ -3,6 +3,7 @@ import { useWishlist } from '../context/WishlistContext.jsx';
 import { ShoppingBag, Trash2, Heart, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency, getProductPrice } from '../utils/formatters.js';
 
 export default function Wishlist() {
   const { wishlist, loading, error, removeFromWishlist } = useWishlist();
@@ -56,8 +57,6 @@ export default function Wishlist() {
             {wishlist.map((item) => {
               const product = item.product || item;
               if (!product) return null;
-              
-              const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
 
               return (
                 <Link
@@ -67,10 +66,14 @@ export default function Wishlist() {
                 >
                   {/* Image Area */}
                   <div className="h-56 bg-gray-950 flex items-center justify-center relative overflow-hidden">
-                    {primaryImage ? (
+                    {product.thumbnailUrl ? (
                       <img
-                        src={primaryImage.image_url}
+                        src={product.thumbnailUrl}
                         alt={product.title}
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>`;
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
@@ -79,7 +82,7 @@ export default function Wishlist() {
 
                     {/* Delete button */}
                     <button
-                      onClick={(e) => handleRemove(e, product.id)}
+                      onClick={(e) => handleRemove(e, product.productId || product.id)}
                       className="absolute top-4 right-4 p-2 rounded-full bg-gray-900/80 border border-gray-800 text-gray-400 hover:text-red-500 hover:bg-red-500/10 shadow-md transition-colors"
                       title="Remove from wishlist"
                     >
@@ -107,8 +110,21 @@ export default function Wishlist() {
                     {/* Pricing */}
                     <div className="flex items-center justify-between pt-3 border-t border-gray-850">
                       <div>
-                        <span className="text-[10px] text-gray-500 line-through">₹{product.base_mrp}</span>
-                        <span className="text-base font-bold text-amber-400 ml-2">₹{product.base_price}</span>
+                        {(() => {
+                          const priceInfo = getProductPrice(product);
+                          return (
+                            <div className="flex items-baseline">
+                              <span className="text-base font-bold text-amber-400">
+                                {formatCurrency(priceInfo.sellingPrice)}
+                              </span>
+                              {priceInfo.hasDiscount && (
+                                <span className="text-[10px] text-gray-500 line-through ml-2">
+                                  {formatCurrency(priceInfo.mrp)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <span className="inline-flex items-center text-[10px] font-bold text-amber-500 group-hover:translate-x-1 transition-transform">
                         <span>View Details</span>

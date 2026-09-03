@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../utils/api.js';
 import { Package, RotateCcw, AlertTriangle, ArrowLeft, ChevronRight, Check } from 'lucide-react';
 import BaseLayout from '../components/BaseLayout.jsx';
+import { formatCurrency } from '../utils/formatters.js';
 
 export default function RequestReturn() {
   const [searchParams] = useSearchParams();
@@ -305,7 +306,7 @@ export default function RequestReturn() {
                                 <span>Color: {item.color}</span>
                               </div>
                               <div className="text-xs text-gray-400 font-bold">
-                                Purchase Price: ₹{item.unitPrice} | Remaining: {item.eligibleQuantity} / {item.purchasedQuantity}
+                                Purchase Price: {formatCurrency(item.unitPrice)} | Remaining: {item.eligibleQuantity} / {item.purchasedQuantity}
                               </div>
                             </div>
                           </div>
@@ -341,11 +342,16 @@ export default function RequestReturn() {
                                       className="bg-gray-950 border border-gray-850 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
                                     >
                                       <option value="">-- Choose Size --</option>
-                                      {variants.map(v => (
-                                        <option key={v.id} value={v.id}>
-                                          {v.size} {v.color && `(${v.color})`} {Number(v.quantityAvailable || v.quantity_available) <= 0 ? '(Out of Stock)' : ''}
-                                        </option>
-                                      ))}
+                                      {variants.map(v => {
+                                        const sizeName = typeof v.size === 'object' ? (v.size?.name || v.size?.code || 'N/A') : (v.size || 'N/A');
+                                        const colorName = typeof v.color === 'object' ? (v.color?.name || '') : (v.color || '');
+                                        const isOut = Number(v.quantityAvailable || v.quantity_available) <= 0;
+                                        return (
+                                          <option key={v.id} value={v.id}>
+                                            {sizeName} {colorName ? `(${colorName})` : ''} {isOut ? '(Out of Stock)' : ''}
+                                          </option>
+                                        );
+                                      })}
                                     </select>
                                   )}
                                 </div>
