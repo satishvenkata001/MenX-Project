@@ -100,24 +100,6 @@ async function runPhase4DTests() {
     customer2UserId = c2.uid;
     customer2Token = c2.token;
 
-    // Seed store
-    const { data: st } = await supabaseAdmin
-      .from('stores')
-      .insert({
-        name: 'MenX Flagship',
-        code: `FLAGSHIP-${ts}`,
-        type: 'PHYSICAL_STORE',
-        address_line1: 'Road 1',
-        city: 'Hyderabad',
-        state: 'Telangana',
-        postal_code: '500001',
-        phone: '+91 9988776655',
-        is_active: true
-      })
-      .select()
-      .single();
-    testStore = st;
-    createdStoreIds.push(st.id);
 
     // Seed taxonomy
     const { data: cat } = await supabaseAdmin
@@ -138,11 +120,10 @@ async function runPhase4DTests() {
 
     const { data: br } = await supabaseAdmin
       .from('brands')
-      .insert({ name: `MenX Polo ${ts}`, slug: `menx-polo-${ts}` })
-      .select()
+      .select('*')
+      .limit(1)
       .single();
     testBrand = br;
-    createdBrandIds.push(br.id);
 
     const { data: sz1 } = await supabaseAdmin
       .from('sizes')
@@ -273,8 +254,8 @@ async function runPhase4DTests() {
     await supabaseAdmin
       .from('inventory_items')
       .insert([
-        { store_id: st.id, variant_id: v1.id, quantity_available: 5 },
-        { store_id: st.id, variant_id: v2.id, quantity_available: 10 }
+        { variant_id: v1.id, quantity_available: 5 },
+        { variant_id: v2.id, quantity_available: 10 }
       ]);
 
     console.log(' [PASS] Setup completed successfully with all test fixtures.\n');

@@ -1,7 +1,8 @@
-import { supabaseAdmin, createAuthClient } from '../config/supabase.js';
+import { supabaseAdmin, createAuthClient, createUserClient } from '../config/supabase.js';
 import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { invalidateAuthCache } from '../middleware/auth.js';
 
 export class AuthService {
   /**
@@ -10,75 +11,7 @@ export class AuthService {
   static async signup({ email, password, firstName, lastName, phone }) {
     const authClient = createAuthClient();
 
-    // In a test environment, register via Admin API and auto-confirm email to bypass remote rate limits
-    if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName || null,
-          phone: phone || null
-        }
-      });
-
-      if (authError || !authData.user) {
-        logger.warn('Signup failed in Supabase Auth (Test)', { error: authError?.message });
-        throw AppError.badRequest(authError?.message || 'Failed to create user account');
-      }
-
-      const userId = authData.user.id;
-
-      // Fetch profile
-      let { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (!profile) {
-        const { data: createdProfile, error: profileErr } = await supabaseAdmin
-          .from('profiles')
-          .insert({
-            id: userId,
-            first_name: firstName,
-            last_name: lastName || null,
-            email,
-            phone: phone || '',
-            role: 'CUSTOMER'
-          })
-          .select()
-          .single();
-
-        if (!profileErr && createdProfile) {
-          profile = createdProfile;
-        }
-      }
-
-      const { data: loginData } = await authClient.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      return {
-        user: {
-          id: authData.user.id,
-          email: authData.user.email,
-          createdAt: authData.user.created_at
-        },
-        profile: profile || null,
-        session: loginData?.session ? {
-          accessToken: loginData.session.access_token,
-          refreshToken: loginData.session.refresh_token,
-          expiresIn: loginData.session.expires_in,
-          expiresAt: loginData.session.expires_at,
-          tokenType: loginData.session.token_type
-        } : null
-      };
-    }
-
-    // Production flow: Use standard Supabase signUp (sends 6-digit confirmation OTP)
+    // Standard Supabase signUp (sends email verification link)
     const { data: authData, error: authError } = await authClient.auth.signUp({
       email,
       password,
@@ -87,7 +20,8 @@ export class AuthService {
           first_name: firstName,
           last_name: lastName || null,
           phone: phone || null
-        }
+        },
+        emailRedirectTo: `${env.FRONTEND_URL}/login`
       }
     });
 
@@ -137,13 +71,7 @@ export class AuthService {
         createdAt: authData.user.created_at
       },
       profile: profile || null,
-      session: authData.session ? {
-        accessToken: authData.session.access_token,
-        refreshToken: authData.session.refresh_token,
-        expiresIn: authData.session.expires_in,
-        expiresAt: authData.session.expires_at,
-        tokenType: authData.session.token_type
-      } : null
+      session: null // New customer registration requires email verification before session is granted
     };
   }
 
@@ -326,6 +254,8 @@ export class AuthService {
       throw AppError.badRequest('Failed to update password. Please try again.');
     }
 
+    invalidateAuthCache(userId);
+
     return {
       message: 'Password updated successfully.'
     };
@@ -371,23 +301,33 @@ export class AuthService {
   }
 
   /**
-   * Resends the 6-digit email confirmation OTP code
+   * Resends the email confirmation verification link
    */
-  static async resendOtp(email) {
+  static async resendVerification(email) {
     const authClient = createAuthClient();
     const { error } = await authClient.auth.resend({
       type: 'signup',
-      email
+      email,
+      options: {
+        emailRedirectTo: `${env.FRONTEND_URL}/login`
+      }
     });
 
     if (error) {
-      logger.warn('Resend OTP failed', { error: error.message });
+      logger.warn('Resend verification email failed', { error: error.message });
       throw AppError.badRequest(error.message);
     }
 
     return {
-      message: 'Verification code resent successfully.'
+      message: 'Verification link resent successfully. Please check your inbox.'
     };
+  }
+
+  /**
+   * Alias for backwards compatibility
+   */
+  static async resendOtp(email) {
+    return this.resendVerification(email);
   }
 
   /**
@@ -426,6 +366,7 @@ export class AuthService {
       throw AppError.notFound('Profile not found');
     }
 
+    invalidateAuthCache(userId);
     return profile;
   }
 }

@@ -102,22 +102,38 @@ export const getCustomerDetailsAdmin = async (customerId) => {
 
     const customer = profileRes.rows[0];
 
-    // 2. Fetch statistics (Excluding Cancelled / Failed Delivery orders from total_spent)
-    const statsRes = await client.query(
-      `SELECT 
-         COUNT(*) FILTER (WHERE order_status = 'PENDING')::int AS pending_orders,
-         COUNT(*) FILTER (WHERE order_status = 'CONFIRMED')::int AS confirmed_orders,
-         COUNT(*) FILTER (WHERE order_status = 'PACKED')::int AS packed_orders,
-         COUNT(*) FILTER (WHERE order_status = 'SHIPPED')::int AS shipped_orders,
-         COUNT(*) FILTER (WHERE order_status = 'OUT_FOR_DELIVERY')::int AS out_for_delivery_orders,
-         COUNT(*) FILTER (WHERE order_status = 'DELIVERED')::int AS delivered_orders,
-         COUNT(*) FILTER (WHERE order_status = 'CANCELLED')::int AS cancelled_orders,
-         COUNT(*)::int AS total_orders,
-         COALESCE(SUM(CASE WHEN order_status NOT IN ('CANCELLED', 'FAILED_DELIVERY') THEN total_payable ELSE 0 END), 0)::float AS total_spent
-       FROM orders
-       WHERE customer_id = $1`,
-      [customerId]
-    );
+    // 2. Fetch statistics, orders history, and addresses concurrently
+    const [statsRes, ordersRes, addressesRes] = await Promise.all([
+      client.query(
+        `SELECT 
+           COUNT(*) FILTER (WHERE order_status = 'PENDING')::int AS pending_orders,
+           COUNT(*) FILTER (WHERE order_status = 'CONFIRMED')::int AS confirmed_orders,
+           COUNT(*) FILTER (WHERE order_status = 'PACKED')::int AS packed_orders,
+           COUNT(*) FILTER (WHERE order_status = 'SHIPPED')::int AS shipped_orders,
+           COUNT(*) FILTER (WHERE order_status = 'OUT_FOR_DELIVERY')::int AS out_for_delivery_orders,
+           COUNT(*) FILTER (WHERE order_status = 'DELIVERED')::int AS delivered_orders,
+           COUNT(*) FILTER (WHERE order_status = 'CANCELLED')::int AS cancelled_orders,
+           COUNT(*)::int AS total_orders,
+           COALESCE(SUM(CASE WHEN order_status NOT IN ('CANCELLED', 'FAILED_DELIVERY') THEN total_payable ELSE 0 END), 0)::float AS total_spent
+         FROM orders
+         WHERE customer_id = $1`,
+        [customerId]
+      ),
+      client.query(
+        `SELECT id, order_number, created_at, order_status, payment_method, total_payable
+         FROM orders
+         WHERE customer_id = $1
+         ORDER BY created_at DESC`,
+        [customerId]
+      ),
+      client.query(
+        `SELECT id, address_type, recipient_name, phone_number, alternate_phone, address_line1, address_line2, landmark, city, state, postal_code, is_default
+         FROM addresses
+         WHERE user_id = $1
+         ORDER BY is_default DESC, created_at DESC`,
+        [customerId]
+      )
+    ]);
 
     const statistics = statsRes.rows[0] || {
       pending_orders: 0,
@@ -130,24 +146,6 @@ export const getCustomerDetailsAdmin = async (customerId) => {
       total_orders: 0,
       total_spent: 0
     };
-
-    // 3. Fetch orders history
-    const ordersRes = await client.query(
-      `SELECT id, order_number, created_at, order_status, payment_method, total_payable
-       FROM orders
-       WHERE customer_id = $1
-       ORDER BY created_at DESC`,
-      [customerId]
-    );
-
-    // 4. Fetch address list (Only returning addresses belonging to this customer)
-    const addressesRes = await client.query(
-      `SELECT id, address_type, recipient_name, phone_number, alternate_phone, address_line1, address_line2, landmark, city, state, postal_code, is_default
-       FROM addresses
-       WHERE user_id = $1
-       ORDER BY is_default DESC, created_at DESC`,
-      [customerId]
-    );
 
     return {
       customer,

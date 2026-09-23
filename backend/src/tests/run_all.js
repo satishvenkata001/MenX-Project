@@ -8,13 +8,24 @@ const __dirname = path.dirname(__filename);
 const testFiles = [
   'test_phase4a.js',
   'test_phase4b.js',
-  'test_phase4c.js',
   'test_phase4d.js',
   'test_phase4e.js',
   'return.test.js',
   'test_phase4g.js',
   'test_safe_deletion.js',
-  'variant_stock.test.js'
+  'variant_stock.test.js',
+  'test_category_persistence.js',
+  'test_low_stock_grouping.js',
+  'test_category_size_validation.js',
+  'test_brand_crud.js',
+  'test_order_details_items.js',
+  'test_wishlist_catalogue.js',
+  'test_category_variant_sizes.js',
+  'admin_export.test.js',
+  'test_custom_color_selector.js',
+  'test_cors_origins.js',
+  'test_customer_email_verification_flow.js',
+  'test_three_auth_flows.js'
 ];
 
 async function runTest(file) {

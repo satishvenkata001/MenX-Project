@@ -2,12 +2,171 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* MENX 2.0 Color Tokens */
+  --menx-bg: #0B0F14;
+  --menx-bg-rgb: 11 15 20;
+
+  --menx-surface: #121821;
+  --menx-surface-rgb: 18 24 33;
+
+  --menx-surface-elevated: #18212C;
+  --menx-surface-elevated-rgb: 24 33 44;
+
+  --menx-primary: #F5A524;
+  --menx-primary-rgb: 245 165 36;
+
+  --menx-primary-hover: #FFB52E;
+  --menx-primary-hover-rgb: 255 181 46;
+
+  --menx-text: #F5F7FA;
+  --menx-text-rgb: 245 247 250;
+
+  --menx-text-secondary: #A7B0BC;
+  --menx-text-secondary-rgb: 167 176 188;
+
+  --menx-text-muted: #6F7A87;
+  --menx-text-muted-rgb: 111 122 135;
+
+  --menx-border: #27313D;
+  --menx-border-rgb: 39 49 61;
+
+  --menx-success: #22C55E;
+  --menx-success-rgb: 34 197 94;
+
+  --menx-warning: #F59E0B;
+  --menx-warning-rgb: 245 158 11;
+
+  --menx-error: #EF4444;
+  --menx-error-rgb: 239 68 68;
+
+  --menx-info: #3B82F6;
+  --menx-info-rgb: 59 130 246;
+}
+
 @layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
+    color-scheme: dark;
   }
   body {
     font-family: 'Inter', system-ui, sans-serif;
+    background-color: var(--menx-bg);
+    color: var(--menx-text);
+  }
+
+  /* Global dark styling for form controls to prevent browser-default white styling */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    background-color: var(--menx-surface);
+    color: var(--menx-text);
+    border-color: var(--menx-border);
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="file"])::placeholder,
+  textarea::placeholder {
+    color: var(--menx-text-muted);
+    opacity: 1;
+  }
+
+  /* Dark select dropdown options */
+  select option {
+    background-color: var(--menx-surface-elevated) !important;
+    color: var(--menx-text) !important;
+    padding: 8px 12px;
+  }
+
+  select option:checked,
+  select option:hover {
+    background-color: var(--menx-border) !important;
+    color: var(--menx-primary) !important;
+  }
+
+  /* Prevent browser autofill from turning inputs white */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--menx-text) !important;
+    -webkit-box-shadow: 0 0 0px 1000px #121821 inset !important;
+    transition: background-color 5000s ease-in-out 0s !important;
+    caret-color: var(--menx-text) !important;
+  }
+
+  /* Focus rings with MENX Primary Accent */
+  input:focus:not([type="checkbox"]):not([type="radio"]),
+  select:focus,
+  textarea:focus {
+    border-color: var(--menx-primary);
+    outline: none;
+    box-shadow: 0 0 0 1px rgba(245, 165, 36, 0.4);
+  }
+
+  /* Disabled form controls */
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    background-color: var(--menx-bg) !important;
+    color: var(--menx-text-muted) !important;
+    border-color: var(--menx-border) !important;
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+  }
+}
+
+@layer components {
+  /* ==========================================================================
+     GLOBAL MENX PREMIUM ATMOSPHERIC CARD GRADIENT SYSTEM
+     ========================================================================== */
+  .menx-card {
+    background: linear-gradient(135deg, rgba(245, 165, 36, 0.05) 0%, rgba(24, 33, 44, 0.65) 35%, var(--menx-surface) 100%), var(--menx-surface);
+    border: 1px solid var(--menx-border);
+  }
+
+  .menx-card-elevated {
+    background: linear-gradient(135deg, rgba(245, 165, 36, 0.07) 0%, rgba(24, 33, 44, 0.85) 40%, var(--menx-surface-elevated) 100%), var(--menx-surface-elevated);
+    border: 1px solid var(--menx-border);
+  }
+
+  .menx-card-interactive {
+    background: linear-gradient(135deg, rgba(245, 165, 36, 0.05) 0%, rgba(24, 33, 44, 0.65) 35%, var(--menx-surface) 100%), var(--menx-surface);
+    border: 1px solid var(--menx-border);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .menx-card-interactive:hover {
+    background: linear-gradient(135deg, rgba(245, 165, 36, 0.085) 0%, rgba(24, 33, 44, 0.85) 40%, var(--menx-surface-elevated) 100%), var(--menx-surface);
+    border-color: rgba(245, 165, 36, 0.35);
+    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.5), 0 0 18px -4px rgba(245, 165, 36, 0.08);
+  }
+
+  /* Reusable MENX Admin Form Control Classes */
+  .admin-input {
+    @apply w-full bg-menx-surface border border-menx-border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-menx-text placeholder-menx-text-muted focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-select {
+    @apply w-full bg-menx-surface border border-menx-border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-menx-text font-medium focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-textarea {
+    @apply w-full bg-menx-surface border border-menx-border rounded-xl p-3.5 text-xs sm:text-sm text-menx-text placeholder-menx-text-muted focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all font-medium resize-y disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-search-input {
+    @apply bg-menx-surface border border-menx-border rounded-xl pl-9 pr-3.5 py-2 text-xs sm:text-sm text-menx-text placeholder-menx-text-muted focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all font-medium;
+  }
+
+  .admin-filter-select {
+    @apply bg-menx-surface border border-menx-border rounded-xl px-3 py-2 text-xs sm:text-sm text-menx-text font-medium focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all;
   }
 }
 
@@ -16,7 +175,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
-    scrollbar-color: #f59e0b transparent;
+    scrollbar-color: var(--menx-primary) transparent;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -29,17 +188,17 @@
   }
 
   .mobile-category-scroll::-webkit-scrollbar-thumb {
-    background: #f59e0b;
+    background: var(--menx-primary);
     border-radius: 999px;
   }
 
   .mobile-category-scroll::-webkit-scrollbar-thumb:hover {
-    background: #d97706;
+    background: var(--menx-primary-hover);
   }
 
   .custom-admin-modal-scroll {
     scrollbar-width: thin;
-    scrollbar-color: #334155 #020617;
+    scrollbar-color: var(--menx-border) var(--menx-bg);
   }
 
   .custom-admin-modal-scroll::-webkit-scrollbar {
@@ -48,16 +207,16 @@
   }
 
   .custom-admin-modal-scroll::-webkit-scrollbar-track {
-    background: #020617;
+    background: var(--menx-bg);
     border-radius: 999px;
   }
 
   .custom-admin-modal-scroll::-webkit-scrollbar-thumb {
-    background: #334155;
+    background: var(--menx-border);
     border-radius: 999px;
   }
 
   .custom-admin-modal-scroll::-webkit-scrollbar-thumb:hover {
-    background: #f59e0b;
+    background: var(--menx-primary);
   }
 }

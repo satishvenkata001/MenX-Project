@@ -6,28 +6,38 @@ import { AppError } from '../utils/appError.js';
  * Validates checkout parameters from database (calculating all prices, delivery fees, and discount server-side)
  */
 export const validateCheckout = async (userId, addressId, couponCode) => {
-  // 1. Verify Shipping Address Ownership
-  const { data: address, error: addrError } = await supabaseAdmin
-    .from('addresses')
-    .select('*')
-    .eq('id', addressId)
-    .eq('user_id', userId)
-    .single();
+  // 1. Concurrently fetch Shipping Address Ownership, Customer Cart, and Delivery Zones
+  const [addrRes, cartRes, zonesRes] = await Promise.all([
+    supabaseAdmin
+      .from('addresses')
+      .select('*')
+      .eq('id', addressId)
+      .eq('user_id', userId)
+      .single(),
+    supabaseAdmin
+      .from('carts')
+      .select('id')
+      .eq('user_id', userId)
+      .single(),
+    pool
+      ? pool.query('SELECT * FROM delivery_zones WHERE is_active = true').then(r => ({ data: r.rows, error: null })).catch(e => ({ data: null, error: e }))
+      : supabaseAdmin.from('delivery_zones').select('*').eq('is_active', true).limit(10000)
+  ]);
 
-  if (addrError || !address) {
+  if (addrRes.error || !addrRes.data) {
     throw AppError.badRequest('Invalid shipping address or ownership');
   }
+  const address = addrRes.data;
 
-  // 2. Retrieve Customer Cart
-  const { data: cart, error: cartError } = await supabaseAdmin
-    .from('carts')
-    .select('id')
-    .eq('user_id', userId)
-    .single();
-
-  if (cartError || !cart) {
+  if (cartRes.error || !cartRes.data) {
     throw AppError.notFound('Customer cart not found');
   }
+  const cart = cartRes.data;
+
+  if (zonesRes.error || !zonesRes.data) {
+    throw AppError.internal('Failed to retrieve delivery zones');
+  }
+  const zones = zonesRes.data;
 
   // 3. Fetch Cart Items & Snapshots
   const { data: cartItems, error: itemsError } = await supabaseAdmin
@@ -48,24 +58,16 @@ export const validateCheckout = async (userId, addressId, couponCode) => {
   }
 
   // 5. Determine Delivery Zone
-  const { data: zones, error: zoneError } = await supabaseAdmin
-    .from('delivery_zones')
-    .select('*')
-    .eq('is_active', true);
-
-  if (zoneError || !zones) {
-    throw AppError.internal('Failed to retrieve delivery zones');
-  }
-
   let matchedZone = null;
   let bestMatchLength = -1;
+  const cleanPostalCode = (address.postal_code || '').trim();
 
   for (const zone of zones) {
-    const pattern = zone.pincode_pattern;
+    const pattern = (zone.pincode_pattern || '').trim();
     const regexStr = '^' + pattern.replace(/\*/g, '.*') + '$';
     const regex = new RegExp(regexStr);
 
-    if (regex.test(address.postal_code)) {
+    if (regex.test(cleanPostalCode)) {
       const specLength = pattern.replace(/\*/g, '').length;
       if (specLength > bestMatchLength) {
         bestMatchLength = specLength;
@@ -85,57 +87,28 @@ export const validateCheckout = async (userId, addressId, couponCode) => {
   }
   subtotal = Math.round(subtotal * 100) / 100;
 
-  // 7. Determine Store Fulfillability
+  // 7. Validate Stock Availability
   const variantIds = cartItems.map(i => i.variant_id);
   const { data: inventory, error: invError } = await supabaseAdmin
     .from('inventory_items')
-    .select('*, stores(*)')
+    .select('*')
     .in('variant_id', variantIds);
 
   if (invError || !inventory) {
     throw AppError.internal('Failed to retrieve inventory items');
   }
 
-  const storeInventory = {};
+  const stockMap = {};
   for (const inv of inventory) {
-    if (!inv.stores || !inv.stores.is_active) continue;
-    if (!storeInventory[inv.store_id]) {
-      storeInventory[inv.store_id] = {
-        store: inv.stores,
-        items: {}
-      };
-    }
-    storeInventory[inv.store_id].items[inv.variant_id] = inv.quantity_available;
+    stockMap[inv.variant_id] = inv.quantity_available;
   }
 
-  const candidateStores = [];
-  for (const storeId in storeInventory) {
-    const group = storeInventory[storeId];
-    let canFulfill = true;
-    for (const item of cartItems) {
-      const available = group.items[item.variant_id] || 0;
-      if (available < item.quantity) {
-        canFulfill = false;
-        break;
-      }
-    }
-    if (canFulfill) {
-      candidateStores.push(group.store);
+  for (const item of cartItems) {
+    const available = stockMap[item.variant_id] || 0;
+    if (available < item.quantity) {
+      throw AppError.badRequest(`Insufficient stock for variant ${item.variant_id}. Available: ${available}, Requested: ${item.quantity}`);
     }
   }
-
-  const storeTypes = ['ONLINE_FULFILLMENT', 'CENTRAL_WAREHOUSE', 'PHYSICAL_STORE'];
-  candidateStores.sort((a, b) => {
-    const idxA = storeTypes.indexOf(a.type);
-    const idxB = storeTypes.indexOf(b.type);
-    if (idxA !== idxB) return idxA - idxB;
-    return new Date(a.created_at) - new Date(b.created_at);
-  });
-
-  if (candidateStores.length === 0) {
-    throw AppError.badRequest('Insufficient stock across all active stores for the selected items');
-  }
-  const selectedStore = candidateStores[0];
 
   // 8. Validate Coupon
   let discount = 0;
@@ -203,8 +176,7 @@ export const validateCheckout = async (userId, addressId, couponCode) => {
     subtotal,
     discount,
     deliveryFee,
-    total,
-    fulfillmentStoreId: selectedStore.id
+    total
   };
 };
 
@@ -236,7 +208,30 @@ export const createOrder = async (userId, addressId, couponCode, customerNotes, 
 export const getOrders = async (userId, { page = 1, limit = 10, status }) => {
   let query = supabaseAdmin
     .from('orders')
-    .select('*', { count: 'exact' })
+    .select(`
+      *,
+      order_items(
+        id,
+        product_title_snapshot,
+        variant_sku_snapshot,
+        size_snapshot,
+        color_snapshot,
+        quantity,
+        unit_price_snapshot,
+        unit_mrp_snapshot,
+        line_total,
+        variant:product_variants(
+          id,
+          sku,
+          product:products(
+            id,
+            title,
+            slug,
+            images:product_images(id, image_url, alt_text, is_primary, display_order)
+          )
+        )
+      )
+    `, { count: 'exact' })
     .eq('customer_id', userId);
 
   if (status) {
@@ -274,9 +269,17 @@ export const getOrderDetails = async (userId, orderId) => {
         *,
         variant:product_variants(
           id,
+          sku,
+          is_active,
           product:products(
             id,
-            images:product_images(image_url, is_primary, display_order)
+            title,
+            slug,
+            status,
+            category:categories(id, name, slug),
+            subcategory:subcategories(id, name, slug),
+            brand:brands(id, name, slug, logo_url),
+            images:product_images(id, image_url, alt_text, is_primary, display_order)
           )
         )
       )
@@ -336,7 +339,7 @@ export const cancelOrder = async (userId, orderId, reason) => {
 
     // 1. Fetch order and lock the row to prevent updates
     const orderRes = await client.query(
-      'SELECT order_status, customer_id, store_id FROM orders WHERE id = $1 FOR UPDATE',
+      'SELECT order_status, customer_id FROM orders WHERE id = $1 FOR UPDATE',
       [orderId]
     );
 
@@ -377,7 +380,7 @@ export const cancelOrder = async (userId, orderId, reason) => {
     );
 
     for (const item of itemsRes.rows) {
-      if (!item.variant_id || !order.store_id) continue;
+      if (!item.variant_id) continue;
 
       // 4. Update inventory_items to restore stock
       await client.query(
@@ -386,25 +389,23 @@ export const cancelOrder = async (userId, orderId, reason) => {
            quantity_available = quantity_available + $1, 
            quantity_reserved = quantity_reserved - $1, 
            updated_at = NOW() 
-         WHERE store_id = $2 AND variant_id = $3`,
-        [item.quantity, order.store_id, item.variant_id]
+         WHERE variant_id = $2`,
+        [item.quantity, item.variant_id]
       );
 
       // 5. Log stock movement
       await client.query(
         `INSERT INTO stock_movements (
            variant_id,
-           source_store_id,
            movement_type,
            quantity,
            reference_type,
            reference_id,
            reason,
            performed_by
-         ) VALUES ($1, $2, 'ONLINE_ORDER_CANCELLED', $3, 'ORDER', $4, $5, $6)`,
+         ) VALUES ($1, 'ONLINE_ORDER_CANCELLED', $2, 'ORDER', $3, $4, $5)`,
         [
           item.variant_id,
-          order.store_id,
           item.quantity,
           orderId,
           reason ? `Order cancelled: ${reason}` : 'Order cancelled by customer',

@@ -148,26 +148,6 @@ async function runPhase4FTests() {
     addr1 = await createAddress(customer1UserId);
     addr2 = await createAddress(customer2UserId);
 
-    // Seed Store (ONLINE_FULFILLMENT)
-    const { data: st, error: stErr } = await supabaseAdmin
-      .from('stores')
-      .insert({
-        name: 'MenX F4F Warehouse',
-        code: `ONLINE-${ts}`,
-        type: 'ONLINE_FULFILLMENT',
-        address_line1: 'Warehouse Zone 1',
-        city: 'Hyderabad',
-        state: 'Telangana',
-        postal_code: '500081',
-        phone: '+91 9900990088',
-        is_active: true
-      })
-      .select()
-      .single();
-    if (stErr) throw new Error(`Store insert failed: ${stErr.message}`);
-    testStore = st;
-    createdStoreIds.push(st.id);
-
     // Catalog fixtures
     const { data: cat, error: catErr } = await supabaseAdmin
       .from('categories')
@@ -189,12 +169,11 @@ async function runPhase4FTests() {
 
     const { data: br, error: brErr } = await supabaseAdmin
       .from('brands')
-      .insert({ name: `Brand-${ts}`, slug: `brand-${ts}` })
-      .select()
+      .select('*')
+      .limit(1)
       .single();
-    if (brErr) throw new Error(`Brand insert failed: ${brErr.message}`);
+    if (brErr) throw new Error(`Brand query failed: ${brErr.message}`);
     testBrand = br;
-    createdBrandIds.push(br.id);
 
     const { data: sz, error: szErr } = await supabaseAdmin
       .from('sizes')
@@ -284,8 +263,8 @@ async function runPhase4FTests() {
     const { error: invErr1 } = await supabaseAdmin
       .from('inventory_items')
       .insert([
-        { store_id: st.id, variant_id: variant1.id, quantity_available: 10, quantity_reserved: 0, quantity_damaged: 0 },
-        { store_id: st.id, variant_id: variant2.id, quantity_available: 5, quantity_reserved: 0, quantity_damaged: 0 }
+        { variant_id: variant1.id, quantity_available: 10, quantity_reserved: 0, quantity_damaged: 0 },
+        { variant_id: variant2.id, quantity_available: 5, quantity_reserved: 0, quantity_damaged: 0 }
       ]);
     if (invErr1) throw new Error(`Inventory init failed: ${invErr1.message}`);
 
@@ -320,7 +299,6 @@ async function runPhase4FTests() {
           order_number: orderNum,
           customer_id: uid,
           order_channel: 'ONLINE',
-          store_id: st.id,
           order_status: status,
           payment_method: 'COD',
           payment_status: 'PENDING',
@@ -377,14 +355,12 @@ async function runPhase4FTests() {
         const { data: inv } = await supabaseAdmin
           .from('inventory_items')
           .select('quantity_available')
-          .eq('store_id', st.id)
           .eq('variant_id', variantId)
           .single();
         if (inv) {
           await supabaseAdmin
             .from('inventory_items')
             .update({ quantity_available: inv.quantity_available - qty })
-            .eq('store_id', st.id)
             .eq('variant_id', variantId);
         }
       }
@@ -584,7 +560,7 @@ async function runPhase4FTests() {
     // Verify Resellable Return (INV-01)
     // Variant 1 initial stock was 10. We had reserved 0. 
     // Let's create an order for variant1, deliver it, return it as RESELLABLE, complete it, and verify available stock becomes 10.
-    const { data: invPreResell } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('store_id', st.id).eq('variant_id', variant1.id).single();
+    const { data: invPreResell } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('variant_id', variant1.id).single();
     
     const orderInvResell = await setupTestOrder(customer1UserId, testVariant1.id, 1);
     const resellRetReq = await makeRequest(`${baseUrl}/returns`, 'POST', customer1Token, {
@@ -607,7 +583,7 @@ async function runPhase4FTests() {
 
     await makeRequest(`${baseUrl}/admin/returns/${resellRetId}/status`, 'POST', adminToken, { status: 'COMPLETED' });
 
-    const { data: invPostResell } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('store_id', st.id).eq('variant_id', variant1.id).single();
+    const { data: invPostResell } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('variant_id', variant1.id).single();
     await assert('INV-01: Resellable returns restore quantity_available', invPostResell.quantity_available === invPreResell.quantity_available);
     
     // Verify Defective Return (INV-02)
@@ -632,7 +608,7 @@ async function runPhase4FTests() {
 
     await makeRequest(`${baseUrl}/admin/returns/${defectRetId}/status`, 'POST', adminToken, { status: 'COMPLETED' });
 
-    const { data: invPostDefect } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('store_id', st.id).eq('variant_id', variant1.id).single();
+    const { data: invPostDefect } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_damaged').eq('variant_id', variant1.id).single();
     await assert('INV-02: Defective returns increase quantity_damaged and do not restore quantity_available', invPostDefect.quantity_damaged === invPostResell.quantity_damaged + 1 && invPostDefect.quantity_available === invPostResell.quantity_available - 1);
 
     // -------------------------------------------------------------------------
@@ -651,20 +627,20 @@ async function runPhase4FTests() {
     createdReturnIds.push(excRetId1);
 
     // Make variant2 stock 1 (insufficient for exchange of 2)
-    await supabaseAdmin.from('inventory_items').update({ quantity_available: 1 }).eq('store_id', st.id).eq('variant_id', variant2.id);
+    await supabaseAdmin.from('inventory_items').update({ quantity_available: 1 }).eq('variant_id', variant2.id);
 
     const resExcApproveFail = await makeRequest(`${baseUrl}/admin/returns/${excRetId1}/status`, 'POST', adminToken, { status: 'APPROVED' });
     await assert('EXC-02: Exchange approval fails when replacement variant is out of stock', resExcApproveFail.status === 400);
 
     // EXC-01: Exchange approval with sufficient replacement stock
     // Set variant2 stock to 5
-    await supabaseAdmin.from('inventory_items').update({ quantity_available: 5 }).eq('store_id', st.id).eq('variant_id', variant2.id);
+    await supabaseAdmin.from('inventory_items').update({ quantity_available: 5 }).eq('variant_id', variant2.id);
     
     const resExcApprovePass = await makeRequest(`${baseUrl}/admin/returns/${excRetId1}/status`, 'POST', adminToken, { status: 'APPROVED' });
     await assert('EXC-01: Exchange approval succeeds when replacement variant stock is sufficient', resExcApprovePass.status === 200);
 
     // Verify stock reserved: available goes 5 -> 3, reserved goes 0 -> 2
-    const { data: invReservedExc } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_reserved').eq('store_id', st.id).eq('variant_id', variant2.id).single();
+    const { data: invReservedExc } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_reserved').eq('variant_id', variant2.id).single();
     await assert('EXC-01: Replacement stock is correctly reserved upon approval', invReservedExc.quantity_available === 3 && invReservedExc.quantity_reserved === 2);
 
     // EXC-03: Complete exchange and verify replacement order
@@ -680,7 +656,7 @@ async function runPhase4FTests() {
     await assert('EXC-03: Exchange request completed successfully', resExcComplete.status === 200);
 
     // Verify replacement stock consumed: quantity_reserved goes 2 -> 0
-    const { data: invPostExc } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_reserved').eq('store_id', st.id).eq('variant_id', variant2.id).single();
+    const { data: invPostExc } = await supabaseAdmin.from('inventory_items').select('quantity_available, quantity_reserved').eq('variant_id', variant2.id).single();
     await assert('EXC-03: Reserved stock consumed upon completion', invPostExc.quantity_reserved === 0 && invPostExc.quantity_available === 3);
 
     // Verify replacement order is created with total_payable = 0
@@ -817,9 +793,7 @@ async function runPhase4FTests() {
       if (createdColorIds.length > 0) {
         try { await supabaseAdmin.from('colors').delete().in('id', createdColorIds); } catch (e) {}
       }
-      if (createdStoreIds.length > 0) {
-        try { await supabaseAdmin.from('stores').delete().in('id', createdStoreIds); } catch (e) {}
-      }
+
       if (createdZoneIds.length > 0) {
         try { await supabaseAdmin.from('delivery_zones').delete().in('id', createdZoneIds); } catch (e) {}
       }

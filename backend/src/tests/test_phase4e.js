@@ -154,25 +154,6 @@ async function runPhase4ETests() {
     addr1 = await createAddress(customer1UserId);
     addr2 = await createAddress(customer2UserId);
 
-    // Seed Store (ONLINE_FULFILLMENT)
-    const { data: st, error: stErr } = await supabaseAdmin
-      .from('stores')
-      .insert({
-        name: 'MenX Online Warehouse',
-        code: `ONLINE-${ts}`,
-        type: 'ONLINE_FULFILLMENT',
-        address_line1: 'Warehouse Zone 1',
-        city: 'Hyderabad',
-        state: 'Telangana',
-        postal_code: '500081',
-        phone: '+91 9900990088',
-        is_active: true
-      })
-      .select()
-      .single();
-    if (stErr) throw new Error(`Store insert failed: ${stErr.message}`);
-    testStore = st;
-    createdStoreIds.push(st.id);
 
     // Catalog fixtures
     const { data: cat, error: catErr } = await supabaseAdmin
@@ -195,12 +176,11 @@ async function runPhase4ETests() {
 
     const { data: br, error: brErr } = await supabaseAdmin
       .from('brands')
-      .insert({ name: `Brand-${ts}`, slug: `brand-${ts}` })
-      .select()
+      .select('*')
+      .limit(1)
       .single();
-    if (brErr) throw new Error(`Brand insert failed: ${brErr.message}`);
+    if (brErr) throw new Error(`Brand query failed: ${brErr.message}`);
     testBrand = br;
-    createdBrandIds.push(br.id);
 
     const { data: szActive, error: szActiveErr } = await supabaseAdmin
       .from('sizes')
@@ -272,7 +252,6 @@ async function runPhase4ETests() {
     const { error: invErr1 } = await supabaseAdmin
       .from('inventory_items')
       .insert({
-        store_id: st.id,
         variant_id: variant.id,
         quantity_available: 10,
         quantity_reserved: 0
@@ -320,7 +299,6 @@ async function runPhase4ETests() {
     const { error: invErr2 } = await supabaseAdmin
       .from('inventory_items')
       .insert({
-        store_id: st.id,
         variant_id: varDraft.id,
         quantity_available: 10,
         quantity_reserved: 0
@@ -349,7 +327,6 @@ async function runPhase4ETests() {
     const { error: invErr3 } = await supabaseAdmin
       .from('inventory_items')
       .insert({
-        store_id: st.id,
         variant_id: varInactive.id,
         quantity_available: 10,
         quantity_reserved: 0
@@ -526,7 +503,7 @@ async function runPhase4ETests() {
       const { data: cartItems1 } = await supabaseAdmin.from('cart_items').select('*').eq('cart_id', cart1.id);
       await assert('Customer cart was cleared post checkout', cartItems1.length === 0);
 
-      const { data: inventory } = await supabaseAdmin.from('inventory_items').select('*').eq('store_id', testStore.id).eq('variant_id', testVariant.id).single();
+      const { data: inventory } = await supabaseAdmin.from('inventory_items').select('*').eq('variant_id', testVariant.id).single();
       await assert('Stock was reserved correctly', inventory?.quantity_available === 8 && inventory?.quantity_reserved === 2);
     }
 
@@ -553,7 +530,7 @@ async function runPhase4ETests() {
       await assert('Customer allowed to cancel PENDING order', res9.status === 200);
 
       // Verify cancellation stock recovery
-      const { data: inventoryPostCancel } = await supabaseAdmin.from('inventory_items').select('*').eq('store_id', testStore.id).eq('variant_id', testVariant.id).single();
+      const { data: inventoryPostCancel } = await supabaseAdmin.from('inventory_items').select('*').eq('variant_id', testVariant.id).single();
       await assert('Inventory restored on customer cancellation', inventoryPostCancel?.quantity_available === 10 && inventoryPostCancel?.quantity_reserved === 0);
 
       // Try to cancel again
@@ -622,7 +599,7 @@ async function runPhase4ETests() {
     await assert('Valid transition OUT_FOR_DELIVERY -> DELIVERED accepted', res11f.status === 200);
 
     // Verify stock clear reservation upon DELIVERED
-    const { data: inventoryPostDelivered } = await supabaseAdmin.from('inventory_items').select('*').eq('store_id', testStore.id).eq('variant_id', testVariant.id).single();
+    const { data: inventoryPostDelivered } = await supabaseAdmin.from('inventory_items').select('*').eq('variant_id', testVariant.id).single();
     await assert('Stock reservation cleared upon DELIVERED', inventoryPostDelivered?.quantity_available === 9 && inventoryPostDelivered?.quantity_reserved === 0);
 
     // Verify status history

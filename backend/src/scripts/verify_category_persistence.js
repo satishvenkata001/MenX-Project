@@ -9,7 +9,7 @@ const EXPECTED_CORE_CATEGORIES = [
   'shirts',
   'ethnic-wear',
   'accessories',
-  'jackets',
+  'jackets', VX
   't-shirts',
   'trousers',
   'jeans',

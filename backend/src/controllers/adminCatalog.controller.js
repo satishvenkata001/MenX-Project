@@ -200,6 +200,22 @@ export class AdminCatalogController {
   });
 
   /**
+   * GET /api/v1/admin/brands
+   */
+  static listBrands = asyncHandler(async (req, res) => {
+    const brands = await CatalogService.listAdminBrands();
+    return sendSuccess(res, brands, 'Admin brands retrieved successfully');
+  });
+
+  /**
+   * POST /api/v1/admin/colors
+   */
+  static createColor = asyncHandler(async (req, res) => {
+    const color = await CatalogService.createColor(req.body, req.token);
+    return sendCreated(res, color, 'Color created successfully');
+  });
+
+  /**
    * POST /api/v1/admin/brands
    */
   static createBrand = asyncHandler(async (req, res) => {
@@ -214,6 +230,23 @@ export class AdminCatalogController {
     const { id } = req.params;
     const brand = await CatalogService.updateBrand(id, req.body, req.token);
     return sendSuccess(res, brand, 'Brand updated successfully');
+  });
+
+  /**
+   * DELETE /api/v1/admin/brands/:id
+   */
+  static deleteBrand = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const actor = {
+      id: req.user?.id,
+      role: req.profile?.role || req.user?.role || 'SUPER_ADMIN'
+    };
+    const reqInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('user-agent')
+    };
+    const result = await CatalogService.deleteBrand(id, actor, req.token, reqInfo);
+    return sendSuccess(res, result, result.message || 'Brand deleted successfully');
   });
 
   /**

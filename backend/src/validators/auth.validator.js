@@ -54,4 +54,5 @@ export const resendOtpSchema = z.object({
   })
 });
 
+export const resendVerificationSchema = resendOtpSchema;
 

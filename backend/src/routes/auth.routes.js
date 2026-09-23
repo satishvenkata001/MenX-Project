@@ -11,7 +11,8 @@ import {
   updatePasswordSchema,
   exchangeCodeSchema,
   verifyOtpSchema,
-  resendOtpSchema
+  resendOtpSchema,
+  resendVerificationSchema
 } from '../validators/auth.validator.js';
 
 const router = Router();
@@ -23,6 +24,7 @@ router.post('/refresh', authLimiter, validateRequest(refreshSchema), AuthControl
 router.post('/password-reset', authLimiter, validateRequest(requestPasswordResetSchema), AuthController.requestPasswordReset);
 router.post('/exchange-code', authLimiter, validateRequest(exchangeCodeSchema), AuthController.exchangeCode);
 router.post('/verify-otp', authLimiter, validateRequest(verifyOtpSchema), AuthController.verifyOtp);
+router.post('/resend-verification', authLimiter, validateRequest(resendVerificationSchema), AuthController.resendVerification);
 router.post('/resend-otp', authLimiter, validateRequest(resendOtpSchema), AuthController.resendOtp);
 
 // Protected Authentication Routes

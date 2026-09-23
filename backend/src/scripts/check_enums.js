@@ -5,7 +5,7 @@ async function checkEnums() {
     SELECT t.typname, e.enumlabel
     FROM pg_type t
     JOIN pg_enum e ON t.oid = e.enumtypid
-    WHERE t.typname IN ('order_status', 'payment_status', 'payment_method', 'order_channel')
+    WHERE t.typname IN ('order_status', 'payment_status', 'payment_method', 'order_channel', 'stock_movement_type')
     ORDER BY t.typname, e.enumsortorder;
   `);
 

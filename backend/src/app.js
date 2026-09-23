@@ -15,31 +15,67 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:3000'].filter(Boolean);
+/**
+ * Helper to check if a hostname is a valid local development or LAN private network host.
+ * Covers:
+ * - Loopback: localhost, 127.0.0.1, ::1, [::1]
+ * - RFC 1918 Private IPv4:
+ *   - 10.0.0.0/8 (10.0.0.0 - 10.255.255.255)
+ *   - 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+ *   - 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
+ * - RFC 3927 Link-Local IPv4: 169.254.0.0/16
+ * - Local mDNS / Bonjour domains: *.local
+ */
+const isDevAllowedHost = (hostname) => {
+  if (!hostname) return false;
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]'
+  ) {
+    return true;
+  }
+  if (
+    /^10\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(hostname) ||
+    /^172\.(?:1[6-9]|2\d|3[0-1])\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(hostname) ||
+    /^192\.168\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(hostname) ||
+    /^169\.254\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(hostname) ||
+    hostname.endsWith('.local')
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const configuredOrigins = (env.FRONTEND_URL ? env.FRONTEND_URL.split(',').map(s => s.trim()) : []).filter(Boolean);
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+    // Allow requests with no origin (like mobile native apps, curl, or server-to-server)
     if (!origin) {
       return callback(null, true);
     }
 
-    // In development, dynamically allow any port on localhost, 127.0.0.1, or the local LAN IP
+    // In development ONLY, dynamically allow localhost, 127.0.0.1, ::1, and private LAN IP / local network ranges
     if (env.NODE_ENV === 'development') {
       try {
         const parsedUrl = new URL(origin);
-        const hostname = parsedUrl.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '10.197.179.122') {
+        if (isDevAllowedHost(parsedUrl.hostname)) {
           return callback(null, true);
         }
-      } catch (err) {
+      } catch {
         // Safe fallback on URL parsing error
       }
     }
 
-    if (allowedOrigins.includes(origin)) {
+    // Check explicitly configured allowed origins (e.g. FRONTEND_URL)
+    if (configuredOrigins.includes(origin)) {
       return callback(null, true);
     }
-    return callback(new Error(`CORS policy blocked access from origin: ${origin}`));
+
+    // Clean CORS rejection without throwing an unhandled HTTP 500 error
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

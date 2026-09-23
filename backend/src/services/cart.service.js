@@ -224,17 +224,22 @@ export class CartService {
       throw AppError.badRequest('Maximum 10 units allowed per item in cart');
     }
 
-    // 1. Verify variant exists and is active
-    const { data: variant, error: varErr } = await supabaseAdmin
-      .from('product_variants')
-      .select(`
-        id, product_id, is_active, sku, selling_price, mrp,
-        product:products(id, title, status)
-      `)
-      .eq('id', variantId)
-      .single();
+    // 1. Concurrently verify variant, resolve cart, and fetch stock
+    const [varRes, cartRes, availableStock] = await Promise.all([
+      supabaseAdmin
+        .from('product_variants')
+        .select(`
+          id, product_id, is_active, sku, selling_price, mrp,
+          product:products(id, title, status)
+        `)
+        .eq('id', variantId)
+        .single(),
+      this.resolveCart(userId, guestToken),
+      this.getAvailableStock(variantId)
+    ]);
 
-    if (varErr || !variant || !variant.is_active) {
+    const variant = varRes.data;
+    if (varRes.error || !variant || !variant.is_active) {
       throw AppError.badRequest('Selected product variant is not available');
     }
 
@@ -242,11 +247,7 @@ export class CartService {
       throw AppError.badRequest('Product is not currently available for purchase');
     }
 
-    // 2. Resolve or create cart
-    const { cart, guestToken: resolvedGuestToken } = await this.resolveCart(userId, guestToken);
-
-    // 3. Check available stock
-    const availableStock = await this.getAvailableStock(variantId);
+    const { cart, guestToken: resolvedGuestToken } = cartRes;
 
     // 4. Check if item already exists in this cart
     const { data: existingItem } = await supabaseAdmin

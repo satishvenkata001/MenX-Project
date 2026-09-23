@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CatalogController } from '../controllers/catalog.controller.js';
 import { AdminCatalogController } from '../controllers/adminCatalog.controller.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { validateRequest } from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
@@ -34,8 +34,8 @@ router.get('/sizes', CatalogController.listSizes);
 router.get('/colors', CatalogController.listColors);
 
 // Products
-router.get('/products', validateRequest(paginationQuerySchema), CatalogController.listProducts);
-router.get('/products/:slug', validateRequest(slugParamSchema), CatalogController.getProductBySlug);
+router.get('/products', optionalAuth, validateRequest(paginationQuerySchema), CatalogController.listProducts);
+router.get('/products/:slug', optionalAuth, validateRequest(slugParamSchema), CatalogController.getProductBySlug);
 router.get('/products/:id/variants', validateRequest(idParamSchema), CatalogController.getProductVariants);
 router.get('/products/:id/images', validateRequest(idParamSchema), CatalogController.getProductImages);
 router.delete('/products/:id', ...adminAuth, validateRequest(idParamSchema), AdminCatalogController.deleteProduct);

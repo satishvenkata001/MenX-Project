@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Mail, Lock, User, Phone, LogIn, UserPlus, ArrowLeft, KeyRound } from 'lucide-react';
+import { Mail, Lock, User, Phone, LogIn, Send, ArrowLeft, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
 import BaseLayout from '../components/BaseLayout.jsx';
 import { api } from '../utils/api.js';
 
 export default function Login() {
-  const { login, signup, isAuthenticated, isAdminOrStaff, error: authError } = useAuth();
+  const { login, signup, refreshUser, isAuthenticated, isAdminOrStaff, error: authError } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [cooldown, setCooldown] = useState(0);
+  const [isAccountCreated, setIsAccountCreated] = useState(false);
+
+  // Form Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -21,17 +21,17 @@ export default function Login() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const getErrorMessage = (errStr) => {
     if (!errStr) return '';
     const lower = errStr.toLowerCase();
     if (lower.includes('rate limit') || lower.includes('rate_limit') || lower.includes('too many requests')) {
-      return 'Too many verification emails requested. Please wait before requesting another code.';
+      return 'Too many requests. Please wait a moment before trying again.';
     }
     return errStr;
   };
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -47,55 +47,35 @@ export default function Login() {
     }
   }, [isAuthenticated, isAdminOrStaff, navigate, location]);
 
-  // Handle resend OTP countdown cooldown
+  // Handle incoming Supabase Code exchange if present
   useEffect(() => {
-    let timer = null;
-    if (cooldown > 0) {
-      timer = setTimeout(() => {
-        setCooldown(prev => prev - 1);
-      }, 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [cooldown]);
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      if (verificationCode.length !== 6) {
-        throw new Error('Verification code must be exactly 6 digits');
+    async function handleAuthCallback() {
+      try {
+        const searchParams = new URLSearchParams(location.search);
+        const code = searchParams.get('code');
+        if (code) {
+          try {
+            const res = await api.post('/auth/exchange-code', { code });
+            if (res.data?.session?.accessToken) {
+              api.setToken(res.data.session.accessToken);
+              await refreshUser();
+              navigate('/');
+              return;
+            }
+          } catch (exchangeErr) {
+            console.error('Failed to exchange code:', exchangeErr.message);
+            setError('Authentication session could not be verified. Please sign in.');
+          } finally {
+            window.history.replaceState({}, document.title, location.pathname);
+          }
+        }
+      } catch (err) {
+        console.error('Callback handling error:', err.message);
       }
-      const res = await api.post('/auth/verify-otp', { email, token: verificationCode });
-      
-      const sessionData = res.data;
-      if (sessionData?.session?.accessToken) {
-        api.setToken(sessionData.session.accessToken);
-        window.location.href = '/';
-      } else {
-        throw new Error('Verification succeeded but failed to establish session.');
-      }
-    } catch (err) {
-      console.error('OTP verification failed:', err.message);
-      setError(err.message || 'Verification failed. Please try again.');
-      setLoading(false);
     }
-  };
 
-  const handleResendOtp = async () => {
-    setError('');
-    setSuccess('');
-    try {
-      const res = await api.post('/auth/resend-otp', { email });
-      setSuccess(res.message || 'Verification code resent successfully.');
-      setCooldown(60);
-    } catch (err) {
-      console.error('OTP resend failed:', err.message);
-      setError(err.message || 'Failed to resend verification code');
-    }
-  };
+    handleAuthCallback();
+  }, [location, navigate, refreshUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -105,39 +85,42 @@ export default function Login() {
 
     try {
       if (isForgotPassword) {
-        if (!email) {
+        // Forgot Password Flow
+        if (!email.trim()) {
           throw new Error('Email is required');
         }
-        const res = await api.post('/auth/password-reset', { email });
-        setSuccess(res.message || 'Reset email sent successfully. Please check your inbox.');
+        const res = await api.post('/auth/password-reset', { email: email.trim() });
+        setSuccess(
+          res.data?.message ||
+          res.message ||
+          'If an account with this email exists, a password reset link has been sent.'
+        );
       } else if (isRegister) {
-        if (!firstName) {
+        // Customer Registration Flow
+        if (!firstName.trim()) {
           throw new Error('First name is required');
         }
-        const signUpData = await signup(email, password, firstName, lastName, phone);
-        
-        if (signUpData?.session) {
-          // Already verified (e.g. email confirmations disabled globally)
-          api.setToken(signUpData.session.accessToken);
-          window.location.href = '/';
-        } else {
-          // Verification OTP required
-          setIsVerifying(true);
-          setCooldown(60);
-          setSuccess('Account created! Please verify your email with the 6-digit code sent.');
+        if (!phone.trim()) {
+          throw new Error('Mobile number is required');
         }
+        if (password.length < 8) {
+          throw new Error('Password must be at least 8 characters long');
+        }
+
+        await signup(
+          email.trim(),
+          password,
+          firstName.trim(),
+          lastName.trim() || null,
+          phone.trim() || null
+        );
+
+        // Transition to Account Created state
+        setIsAccountCreated(true);
+        setPassword('');
       } else {
-        try {
-          await login(email, password);
-        } catch (err) {
-          if (err.message && err.message.toLowerCase().includes('verify')) {
-            setIsVerifying(true);
-            setCooldown(60);
-            setSuccess('Please verify your email with the 6-digit code.');
-            return;
-          }
-          throw err;
-        }
+        // Standard Email + Password Sign In Flow
+        await login(email.trim(), password);
       }
     } catch (err) {
       console.error('Authentication action failed:', err.message);
@@ -147,29 +130,14 @@ export default function Login() {
     }
   };
 
-
   return (
     <BaseLayout>
-      <div className="flex-grow flex items-center justify-center p-6 bg-gradient-to-b from-gray-950 to-gray-900">
-        <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="flex-grow flex items-center justify-center p-6 bg-menx-bg">
+        <div className="w-full max-w-md menx-card rounded-2xl shadow-2xl overflow-hidden">
           
-          {isVerifying ? (
-            <div className="p-4 border-b border-gray-850">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsVerifying(false);
-                  setError('');
-                  setSuccess('');
-                }}
-                className="flex items-center space-x-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Sign In</span>
-              </button>
-            </div>
-          ) : isForgotPassword ? (
-            <div className="p-4 border-b border-gray-850">
+          {/* Header Navigation / Tabs */}
+          {isForgotPassword ? (
+            <div className="p-4 border-b border-menx-border">
               <button
                 type="button"
                 onClick={() => {
@@ -177,15 +145,30 @@ export default function Login() {
                   setError('');
                   setSuccess('');
                 }}
-                className="flex items-center space-x-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+                className="flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Sign In</span>
+              </button>
+            </div>
+          ) : isAccountCreated ? (
+            <div className="p-4 border-b border-menx-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAccountCreated(false);
+                  setIsRegister(false);
+                  setError('');
+                  setSuccess('');
+                }}
+                className="flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to Sign In</span>
               </button>
             </div>
           ) : (
-            /* Header tabs */
-            <div className="flex border-b border-gray-850">
+            <div className="flex border-b border-menx-border">
               <button
                 type="button"
                 onClick={() => {
@@ -195,8 +178,8 @@ export default function Login() {
                 }}
                 className={`flex-1 py-4 text-sm font-semibold flex items-center justify-center space-x-2 border-b-2 transition-all ${
                   !isRegister
-                    ? 'border-amber-500 text-amber-500 bg-gray-850/30'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
+                    ? 'border-menx-primary text-menx-primary bg-menx-surface-elevated/30'
+                    : 'border-transparent text-menx-text-secondary hover:text-menx-text'
                 }`}
               >
                 <LogIn className="w-4 h-4" />
@@ -211,223 +194,239 @@ export default function Login() {
                 }}
                 className={`flex-1 py-4 text-sm font-semibold flex items-center justify-center space-x-2 border-b-2 transition-all ${
                   isRegister
-                    ? 'border-amber-500 text-amber-500 bg-gray-850/30'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
+                    ? 'border-menx-primary text-menx-primary bg-menx-surface-elevated/30'
+                    : 'border-transparent text-menx-text-secondary hover:text-menx-text'
                 }`}
               >
-                <UserPlus className="w-4 h-4" />
+                <User className="w-4 h-4" />
                 <span>Register</span>
               </button>
             </div>
           )}
 
-          <form onSubmit={isVerifying ? handleVerifyOtp : handleSubmit} className="p-8 space-y-6">
-            <h2 className="text-2xl font-extrabold text-center tracking-tight text-white">
-              {isVerifying ? 'Verify Your Email' : isForgotPassword ? 'Reset Password' : isRegister ? 'Create Your Account' : 'Welcome Back'}
-            </h2>
-            {isVerifying && (
-              <p className="text-xs text-gray-400 text-center">
-                We've sent a 6-digit verification code to <span className="text-white font-medium">{email}</span>. Please enter it below.
-              </p>
-            )}
-
-            {/* Error alerts */}
-            {(error || authError) && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg text-center font-medium">
-                {getErrorMessage(error || authError)}
+          {/* Account Created Success Screen */}
+          {isAccountCreated ? (
+            <div className="p-8 space-y-6 text-center">
+              <div className="w-16 h-16 bg-menx-success/15 border border-menx-success/30 rounded-2xl flex items-center justify-center mx-auto text-menx-success">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
-            )}
 
-            {/* Success alerts */}
-            {success && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg text-center font-medium">
-                {success}
+              <div className="space-y-2">
+                <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                  Account Created!
+                </h2>
+                <p className="text-xs text-menx-text-secondary leading-relaxed">
+                  Your MENX account for <span className="text-white font-semibold">{email}</span> has been created successfully.
+                </p>
+                <p className="text-xs text-menx-text-muted leading-relaxed">
+                  You can now sign in using your email address and password to start shopping.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-4">
-              {isVerifying ? (
-                /* OTP Verification Field */
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-400 text-center block">6-Digit Verification Code</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors text-center font-bold text-lg tracking-widest"
-                      placeholder="000000"
-                    />
-                  </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAccountCreated(false);
+                  setIsRegister(false);
+                  setError('');
+                  setSuccess('');
+                }}
+                className="w-full py-3 bg-menx-primary hover:bg-menx-primary-hover text-[#0B0F14] font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-lg"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Sign In to Your Account</span>
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="p-8 space-y-6">
+              {/* Card Header Title */}
+              <div className="text-center space-y-1">
+                <h2 className="text-2xl font-extrabold tracking-tight text-white">
+                  {isForgotPassword
+                    ? 'Reset Password'
+                    : isRegister
+                    ? 'Create Your Account'
+                    : 'Welcome Back'}
+                </h2>
+                <p className="text-xs text-menx-text-secondary">
+                  {isForgotPassword
+                    ? 'Enter your email to receive a password reset link.'
+                    : isRegister
+                    ? 'Fill in your details to create your MENX account.'
+                    : 'Sign in to access your orders, wishlist, and profile.'}
+                </p>
+              </div>
+
+              {/* Error alerts */}
+              {(error || authError) && (
+                <div className="p-3 bg-menx-error/10 border border-menx-error/20 text-menx-error text-xs rounded-lg font-medium flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{getErrorMessage(error || authError)}</span>
                 </div>
-              ) : isForgotPassword ? (
-                /* Email for Forgot Password */
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-400">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
-                      placeholder="name@example.com"
-                    />
-                  </div>
+              )}
+
+              {/* Success alerts */}
+              {success && (
+                <div className="p-3 bg-menx-success/10 border border-menx-success/20 text-menx-success text-xs rounded-lg text-center font-medium flex items-center justify-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <span>{success}</span>
                 </div>
-              ) : (
-                <>
-                  {isRegister && (
-                    <>
-                      <div className="flex gap-4">
-                        {/* First Name */}
-                        <div className="flex-1 space-y-1.5">
-                          <label className="text-xs font-semibold text-gray-400">First Name *</label>
-                          <div className="relative">
-                            <User className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                            <input
-                              type="text"
-                              required
-                              value={firstName}
-                              onChange={(e) => setFirstName(e.target.value)}
-                              className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
-                              placeholder="Vikram"
-                            />
-                          </div>
-                        </div>
+              )}
 
-                        {/* Last Name */}
-                        <div className="flex-1 space-y-1.5">
-                          <label className="text-xs font-semibold text-gray-400">Last Name</label>
-                          <div className="relative">
-                            <User className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                            <input
-                              type="text"
-                              value={lastName}
-                              onChange={(e) => setLastName(e.target.value)}
-                              className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
-                              placeholder="Rao"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Phone */}
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-gray-400">Phone Number</label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                          <input
-                            type="tel"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
-                            placeholder="+91 9900998888"
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Email */}
+              <div className="space-y-4">
+                {isForgotPassword ? (
+                  /* Email for Forgot Password */
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-400">Email Address</label>
+                    <label className="text-xs font-semibold text-menx-text-secondary">Email Address</label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
                       <input
                         type="email"
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
+                        className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
                         placeholder="name@example.com"
                       />
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {isRegister && (
+                      <>
+                        <div className="flex gap-4">
+                          {/* First Name */}
+                          <div className="flex-1 space-y-1.5">
+                            <label className="text-xs font-semibold text-menx-text-secondary">First Name *</label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
+                              <input
+                                type="text"
+                                required
+                                value={firstName}
+                                onChange={(e) => setFirstName(e.target.value)}
+                                className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
+                                placeholder="Vikram"
+                              />
+                            </div>
+                          </div>
 
-                  {/* Password */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold text-gray-400">Password</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsForgotPassword(true);
-                          setError('');
-                          setSuccess('');
-                        }}
-                        className="text-xs font-semibold text-amber-500 hover:text-amber-400 transition-colors"
-                      >
-                        Forgot Password?
-                      </button>
+                          {/* Last Name */}
+                          <div className="flex-1 space-y-1.5">
+                            <label className="text-xs font-semibold text-menx-text-secondary">Last Name</label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
+                              <input
+                                type="text"
+                                value={lastName}
+                                onChange={(e) => setLastName(e.target.value)}
+                                className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
+                                placeholder="Rao"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mobile Number */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-menx-text-secondary">Mobile Number *</label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
+                            <input
+                              type="tel"
+                              required
+                              value={phone}
+                              onChange={(e) => setPhone(e.target.value)}
+                              className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
+                              placeholder="+91 9900998888"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Email Address */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-menx-text-secondary">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
+                        <input
+                          type="email"
+                          required
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
+                          placeholder="name@example.com"
+                        />
+                      </div>
                     </div>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
-                      <input
-                        type="password"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
-                        placeholder="••••••••"
-                      />
+
+                    {/* Password */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-semibold text-menx-text-secondary">Password</label>
+                        {!isRegister && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsForgotPassword(true);
+                              setError('');
+                              setSuccess('');
+                            }}
+                            className="text-xs font-semibold text-menx-primary hover:underline transition-colors"
+                          >
+                            Forgot Password?
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
+                        <input
+                          type="password"
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
+                          placeholder="••••••••"
+                        />
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold rounded-lg transition-colors flex items-center justify-center space-x-2"
-            >
-              {loading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-black"></div>
-              ) : (
-                <>
-                  {isVerifying ? (
-                    <span>Verify Code</span>
-                  ) : isForgotPassword ? (
-                    <>
-                      <KeyRound className="w-5 h-5" />
-                      <span>Send Reset Link</span>
-                    </>
-                  ) : isRegister ? (
-                    <>
-                      <UserPlus className="w-5 h-5" />
-                      <span>Sign Up</span>
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-5 h-5" />
-                      <span>Sign In</span>
-                    </>
-                  )}
-                </>
-              )}
-            </button>
-
-
-
-            {isVerifying && (
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  disabled={cooldown > 0}
-                  onClick={handleResendOtp}
-                  className="text-xs font-semibold text-amber-500 hover:text-amber-400 disabled:text-gray-600 transition-colors"
-                >
-                  {cooldown > 0 ? `Resend Code in ${cooldown}s` : 'Resend Verification Code'}
-                </button>
+                  </>
+                )}
               </div>
-            )}
-          </form>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-menx-primary hover:bg-menx-primary-hover disabled:bg-menx-surface-elevated disabled:text-menx-text-muted text-[#0B0F14] font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-lg"
+              >
+                {loading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-black"></div>
+                ) : (
+                  <>
+                    {isForgotPassword ? (
+                      <>
+                        <KeyRound className="w-5 h-5" />
+                        <span>Send Reset Link</span>
+                      </>
+                    ) : isRegister ? (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Create Account</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-5 h-5" />
+                        <span>Sign In</span>
+                      </>
+                    )}
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
         </div>
       </div>
     </BaseLayout>

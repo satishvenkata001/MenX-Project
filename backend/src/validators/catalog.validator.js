@@ -15,7 +15,8 @@ export const paginationQuerySchema = z.object({
     color: z.string().max(50).optional(),
     minPrice: z.string().optional().transform(val => (val ? parseFloat(val) : undefined)),
     maxPrice: z.string().optional().transform(val => (val ? parseFloat(val) : undefined)),
-    sortBy: z.enum(['newest', 'price-asc', 'price-desc', 'name-asc', 'name-desc']).optional().default('newest')
+    sortBy: z.enum(['newest', 'price-asc', 'price-desc', 'name-asc', 'name-desc']).optional().default('newest'),
+    status: z.enum(['PUBLISHED', 'DRAFT', 'ARCHIVED', 'ALL', 'all']).optional()
   })
 });
 
@@ -82,20 +83,37 @@ export const updateSubcategorySchema = z.object({
 // Brand Validators
 export const createBrandSchema = z.object({
   body: z.object({
-    name: z.string().min(1, 'Name is required').max(100),
-    slug: z.string().min(1, 'Slug is required').max(120).regex(slugRegex, 'Slug must be lowercase alphanumeric with hyphens'),
-    logoUrl: z.string().url().optional().nullable()
+    name: z.string().trim().min(1, 'Name is required').max(100),
+    slug: z.string().trim().min(1, 'Slug is required').max(120).regex(slugRegex, 'Slug must be lowercase alphanumeric with hyphens'),
+    description: z.string().trim().max(2000).optional().nullable(),
+    logoUrl: z.string().url().optional().nullable(),
+    isActive: z.boolean().optional().default(true)
   })
 });
 
 export const updateBrandSchema = z.object({
   params: z.object({ id: uuidSchema }),
   body: z.object({
-    name: z.string().min(1).max(100).optional(),
-    slug: z.string().min(1).max(120).regex(slugRegex).optional(),
+    name: z.string().trim().min(1).max(100).optional(),
+    slug: z.string().trim().min(1).max(120).regex(slugRegex, 'Slug must be lowercase alphanumeric with hyphens').optional(),
+    description: z.string().trim().max(2000).optional().nullable(),
     logoUrl: z.string().url().optional().nullable(),
     isActive: z.boolean().optional()
   }).refine(data => Object.keys(data).length > 0, { message: 'At least one field must be provided for update' })
+});
+
+// Color Validators
+export const hexCodeRegex = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+
+export const createColorSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(1, 'Color name is required').max(50, 'Color name must be at most 50 characters'),
+    hexCode: z.string().trim().regex(hexCodeRegex, 'Hex code must be a valid 3 or 6-digit hex format (e.g. #FFF or #FFFFFF)').optional(),
+    hex_code: z.string().trim().regex(hexCodeRegex, 'Hex code must be a valid 3 or 6-digit hex format (e.g. #FFF or #FFFFFF)').optional()
+  }).refine(data => !!(data.hexCode || data.hex_code), {
+    message: 'Hex code is required',
+    path: ['hexCode']
+  })
 });
 
 // Product Validators
@@ -154,20 +172,11 @@ export const createVariantSchema = z.object({
     sellingPrice: z.number().positive('Selling price must be positive'),
     weightGrams: z.number().int().positive().optional().default(300),
     lowStockThreshold: z.number().int().min(0).optional().default(5),
-    initialStock: z.number().int({ message: 'Initial stock must be an integer' }).min(0, { message: 'Initial stock cannot be negative' }).optional().default(0),
-    stockStoreId: uuidSchema.optional().nullable()
-  }).refine(data => data.sellingPrice <= data.mrp, {
-    message: 'Selling price cannot exceed MRP',
-    path: ['sellingPrice']
-  }).refine(data => {
-    if (data.initialStock && data.initialStock > 0) {
-      return !!data.stockStoreId;
-    }
-    return true;
-  }, {
-    message: 'Stock store must be selected when initial stock is greater than 0',
-    path: ['stockStoreId']
+    initialStock: z.number().int({ message: 'Initial stock must be an integer' }).min(0, { message: 'Initial stock cannot be negative' }).optional().default(0)
   })
+}).refine(data => data.body.sellingPrice <= data.body.mrp, {
+  message: 'Selling price cannot exceed MRP',
+  path: ['body', 'sellingPrice']
 });
 
 export const updateVariantSchema = z.object({

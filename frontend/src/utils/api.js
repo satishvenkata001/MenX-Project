@@ -1,14 +1,21 @@
 const getApiBaseUrl = () => {
+  // 1. Prioritize explicit VITE_API_URL
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `${window.location.protocol}//${window.location.hostname}:5000/api/v1`;
-  }
+  // 2. Secondary fallback to VITE_API_BASE_URL if configured
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  return 'http://localhost:5000/api/v1';
+  // 3. Development-only fallback to local hostname :5000 or localhost
+  if (import.meta.env.DEV) {
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `${window.location.protocol}//${window.location.hostname}:5000/api/v1`;
+    }
+    return 'http://localhost:5000/api/v1';
+  }
+  // 4. Safe production fallback (never :5000)
+  return '/api/v1';
 };
 
 const BASE_URL = getApiBaseUrl();
@@ -99,6 +106,9 @@ class ApiClient {
 
       return data;
     } catch (err) {
+      if (err.name === 'AbortError' || err.code === 20 || err.message === 'canceled') {
+        throw err;
+      }
       console.error(`API Error on ${endpoint}:`, err.message);
       throw err;
     }
@@ -122,6 +132,64 @@ class ApiClient {
 
   delete(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'DELETE' });
+  }
+
+  async download(endpoint, options = {}) {
+    const url = `${BASE_URL}${endpoint}`;
+    const headers = { ...options.headers };
+
+    const token = this.getToken();
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const guestToken = localStorage.getItem('menx_guest_token');
+    if (guestToken && !headers['X-Guest-Token']) {
+      headers['X-Guest-Token'] = guestToken;
+    }
+
+    try {
+      const response = await fetch(url, { ...options, method: 'GET', headers });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          this.setToken(null);
+          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+            window.location.href = '/login?expired=true';
+          }
+        }
+
+        let errorData = null;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { message: `Download failed with status ${response.status}` };
+        }
+
+        const errorMessage = errorData?.message || `Download failed with status ${response.status}`;
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        error.data = errorData;
+        throw error;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition');
+      let filename = 'export';
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+
+      return {
+        blob,
+        filename,
+        contentType: response.headers.get('content-type')
+      };
+    } catch (err) {
+      console.error(`Download Error on ${endpoint}:`, err.message);
+      throw err;
+    }
   }
 }
 

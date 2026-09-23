@@ -7,6 +7,7 @@ import { USER_ROLES } from '../config/constants.js';
 import {
   createBrandSchema,
   createCategorySchema,
+  createColorSchema,
   createImageSchema,
   createProductSchema,
   createSubcategorySchema,
@@ -63,7 +64,12 @@ router.patch('/subcategories/:id', validateRequest(updateSubcategorySchema), Adm
 router.delete('/subcategories/:id', validateRequest(idParamSchema), AdminCatalogController.deleteSubcategory);
 
 // Brands
+router.get('/brands', AdminCatalogController.listBrands);
 router.post('/brands', validateRequest(createBrandSchema), AdminCatalogController.createBrand);
 router.patch('/brands/:id', validateRequest(updateBrandSchema), AdminCatalogController.updateBrand);
+router.delete('/brands/:id', validateRequest(idParamSchema), AdminCatalogController.deleteBrand);
+
+// Colors
+router.post('/colors', validateRequest(createColorSchema), AdminCatalogController.createColor);
 
 export default router;

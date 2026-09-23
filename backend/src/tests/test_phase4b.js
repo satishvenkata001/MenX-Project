@@ -478,35 +478,51 @@ async function runPhase4BTests() {
     // -------------------------------------------------------------------------
     console.log('\n>>> Cleaning up all temporary test fixtures...');
     try {
-      if (createdImageIds.length > 0) {
-        await supabaseAdmin.from('product_images').delete().in('id', createdImageIds);
-      }
       if (createdVariantIds.length > 0) {
-        await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds);
+        try { await supabaseAdmin.from('stock_movements').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('inventory_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('cart_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('order_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+        try { await supabaseAdmin.from('return_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+      }
+      if (createdImageIds.length > 0) {
+        try { await supabaseAdmin.from('product_images').delete().in('id', createdImageIds); } catch (e) {}
       }
       if (createdProductIds.length > 0) {
-        await supabaseAdmin.from('products').delete().in('id', createdProductIds);
+        try { await supabaseAdmin.from('product_images').delete().in('product_id', createdProductIds); } catch (e) {}
+        try { await supabaseAdmin.from('wishlist_items').delete().in('product_id', createdProductIds); } catch (e) {}
       }
-      if (createdSubcategoryIds.length > 0) {
-        await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds);
+      if (createdVariantIds.length > 0) {
+        try { await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds); } catch (e) {}
+      }
+      if (createdProductIds.length > 0) {
+        try { await supabaseAdmin.from('product_variants').delete().in('product_id', createdProductIds); } catch (e) {}
+        try { await supabaseAdmin.from('products').delete().in('id', createdProductIds); } catch (e) {}
       }
       if (createdCategoryIds.length > 0) {
-        await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds);
+        try { await supabaseAdmin.from('products').delete().in('category_id', createdCategoryIds); } catch (e) {}
+        try { await supabaseAdmin.from('subcategories').delete().in('category_id', createdCategoryIds); } catch (e) {}
+      }
+      if (createdSubcategoryIds.length > 0) {
+        try { await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds); } catch (e) {}
+      }
+      if (createdCategoryIds.length > 0) {
+        try { await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds); } catch (e) {}
       }
       if (createdBrandIds.length > 0) {
-        await supabaseAdmin.from('brands').delete().in('id', createdBrandIds);
+        try { await supabaseAdmin.from('brands').delete().in('id', createdBrandIds); } catch (e) {}
       }
       if (createdSizeIds.length > 0) {
-        await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds);
+        try { await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds); } catch (e) {}
       }
       if (createdColorIds.length > 0) {
-        await supabaseAdmin.from('colors').delete().in('id', createdColorIds);
+        try { await supabaseAdmin.from('colors').delete().in('id', createdColorIds); } catch (e) {}
       }
       for (const uid of createdUserIds) {
-        await supabaseAdmin.from('profiles').delete().eq('id', uid);
-        await supabaseAdmin.from('wishlists').delete().eq('user_id', uid);
-        await supabaseAdmin.from('carts').delete().eq('user_id', uid);
-        await supabaseAdmin.auth.admin.deleteUser(uid);
+        try { await supabaseAdmin.from('profiles').delete().eq('id', uid); } catch (e) {}
+        try { await supabaseAdmin.from('wishlists').delete().eq('user_id', uid); } catch (e) {}
+        try { await supabaseAdmin.from('carts').delete().eq('user_id', uid); } catch (e) {}
+        try { await supabaseAdmin.auth.admin.deleteUser(uid); } catch (e) {}
       }
       console.log(' [PASS] All temporary test records successfully purged.');
     } catch (cleanErr) {

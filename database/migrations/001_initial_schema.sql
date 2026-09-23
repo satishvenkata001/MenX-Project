@@ -785,7 +785,7 @@ RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles 
     WHERE id = auth.uid() 
-      AND role IN ('STORE_MANAGER', 'SUPER_ADMIN')
+      AND role IN ('INVENTORY_MANAGER', 'STORE_MANAGER', 'SUPER_ADMIN')
       AND is_active = TRUE
   );
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;

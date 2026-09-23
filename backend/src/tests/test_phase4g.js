@@ -137,26 +137,6 @@ async function runPhase4GTests() {
     managerUserId = mgr.uid;
     managerToken = mgr.token;
 
-    // Store
-    const { data: st, error: stErr } = await supabaseAdmin
-      .from('stores')
-      .insert({
-        name: 'MenX 4G Warehouse',
-        code: `ONLINE-${ts}`,
-        type: 'ONLINE_FULFILLMENT',
-        address_line1: 'Warehouse Zone 4G',
-        city: 'Hyderabad',
-        state: 'Telangana',
-        postal_code: '500081',
-        phone: '+91 9900991111',
-        is_active: true
-      })
-      .select()
-      .single();
-    if (stErr) throw new Error(`Store insert failed: ${stErr.message}`);
-    testStore = st;
-    createdStoreIds.push(st.id);
-
     // Category & Subcategory
     const { data: cat, error: catErr } = await supabaseAdmin
       .from('categories')
@@ -533,30 +513,38 @@ async function runPhase4GTests() {
 
     // Delete other catalog and store fixtures
     if (createdVariantIds.length > 0) {
-      await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds);
+      try { await supabaseAdmin.from('stock_movements').delete().in('variant_id', createdVariantIds); } catch (e) {}
+      try { await supabaseAdmin.from('inventory_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+      try { await supabaseAdmin.from('cart_items').delete().in('variant_id', createdVariantIds); } catch (e) {}
+      try { await supabaseAdmin.from('product_variants').delete().in('id', createdVariantIds); } catch (e) {}
     }
     if (createdProductIds.length > 0) {
-      await supabaseAdmin.from('products').delete().in('id', createdProductIds);
+      try { await supabaseAdmin.from('product_images').delete().in('product_id', createdProductIds); } catch (e) {}
+      try { await supabaseAdmin.from('wishlist_items').delete().in('product_id', createdProductIds); } catch (e) {}
+      try { await supabaseAdmin.from('products').delete().in('id', createdProductIds); } catch (e) {}
     }
     if (createdSizeIds.length > 0) {
-      await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds);
+      try { await supabaseAdmin.from('sizes').delete().in('id', createdSizeIds); } catch (e) {}
     }
     if (createdColorIds.length > 0) {
-      await supabaseAdmin.from('colors').delete().in('id', createdColorIds);
+      try { await supabaseAdmin.from('colors').delete().in('id', createdColorIds); } catch (e) {}
     }
     if (createdSubcategoryIds.length > 0) {
-      await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds);
+      try { await supabaseAdmin.from('subcategories').delete().in('id', createdSubcategoryIds); } catch (e) {}
     }
     if (createdCategoryIds.length > 0) {
-      await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds);
+      try { await supabaseAdmin.from('categories').delete().in('id', createdCategoryIds); } catch (e) {}
     }
     if (createdStoreIds.length > 0) {
-      await supabaseAdmin.from('stores').delete().in('id', createdStoreIds);
+      try { await supabaseAdmin.from('stores').delete().in('id', createdStoreIds); } catch (e) {}
     }
 
     // Delete test users (Supabase auth and profiles cascades)
     for (const uid of createdUserIds) {
-      await supabaseAdmin.auth.admin.deleteUser(uid);
+      try { await supabaseAdmin.from('profiles').delete().eq('id', uid); } catch (e) {}
+      try { await supabaseAdmin.from('wishlists').delete().eq('user_id', uid); } catch (e) {}
+      try { await supabaseAdmin.from('carts').delete().eq('user_id', uid); } catch (e) {}
+      try { await supabaseAdmin.auth.admin.deleteUser(uid); } catch (e) {}
     }
 
     console.log(' [PASS] All temporary test records successfully purged.');

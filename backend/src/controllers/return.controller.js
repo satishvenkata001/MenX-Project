@@ -87,11 +87,10 @@ export const listReturnsAdminHandler = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { status, storeId, search } = req.query;
+    const { status, search } = req.query;
 
     const result = await AdminReturnService.listReturns(
-      { page, limit, status, storeId, search },
-      req.profile
+      { page, limit, status, search }
     );
 
     return res.status(HTTP_STATUS.OK).json({
@@ -107,7 +106,7 @@ export const getReturnDetailsAdminHandler = async (req, res, next) => {
   try {
     const { returnId } = req.params;
 
-    const result = await AdminReturnService.getReturnDetailsAdmin(returnId, req.profile);
+    const result = await AdminReturnService.getReturnDetailsAdmin(returnId);
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: result
@@ -127,8 +126,7 @@ export const transitionReturnStatusHandler = async (req, res, next) => {
       returnId,
       status,
       { comment, itemsCondition },
-      actorId,
-      req.profile
+      actorId
     );
 
     return res.status(HTTP_STATUS.OK).json({

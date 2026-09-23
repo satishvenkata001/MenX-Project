@@ -216,3 +216,48 @@ export function getVariantStock(variant) {
   };
 }
 
+/**
+ * Authoritative stock warning status evaluator.
+ * Consistent across variant lists and low-stock warning dashboards.
+ *
+ * @param {number|string|null|undefined} availableStock
+ * @param {number|string|null|undefined} minThreshold
+ * @returns {{ status: 'OUT_OF_STOCK'|'LOW_STOCK'|'IN_STOCK', warningType: 'OOS'|'LOW'|'HEALTHY', label: string, badgeClass: string, requiresAttention: boolean, severityRatio: number }}
+ */
+export function getStockWarningStatus(availableStock, minThreshold = 5) {
+  const stock = Number(availableStock ?? 0);
+  const threshold = Number(minThreshold ?? 5);
+
+  if (stock <= 0) {
+    return {
+      status: 'OUT_OF_STOCK',
+      warningType: 'OOS',
+      label: 'OUT OF STOCK',
+      badgeClass: 'bg-red-500/10 border-red-500/30 text-red-400',
+      requiresAttention: true,
+      severityRatio: 0
+    };
+  }
+
+  if (stock <= threshold) {
+    return {
+      status: 'LOW_STOCK',
+      warningType: 'LOW',
+      label: 'LOW STOCK',
+      badgeClass: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
+      requiresAttention: true,
+      severityRatio: threshold > 0 ? (stock / threshold) : 1
+    };
+  }
+
+  return {
+    status: 'IN_STOCK',
+    warningType: 'HEALTHY',
+    label: 'IN STOCK',
+    badgeClass: 'bg-green-500/10 border-green-500/30 text-green-400',
+    requiresAttention: false,
+    severityRatio: threshold > 0 ? (stock / threshold) : 1
+  };
+}
+
+

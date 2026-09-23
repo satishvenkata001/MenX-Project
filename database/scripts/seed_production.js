@@ -1,13 +1,14 @@
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
-const require = createRequire('c:/Users/91938/OneDrive/Desktop/MenX/backend/');
-const fs = require('fs');
-const path = require('path');
-const pg = require('pg');
-const dotenv = require('dotenv');
+import fs from 'fs';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const require = createRequire(path.join(__dirname, '..', '..', 'backend', 'package.json'));
+const pg = require('pg');
+const dotenv = require('dotenv');
 
 // Load environment variables from the backend folder
 dotenv.config({ path: path.join(__dirname, '..', '..', 'backend', '.env') });

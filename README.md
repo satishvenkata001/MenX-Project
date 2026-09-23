@@ -84,9 +84,9 @@ MenX/
 
 ## 📖 Documentation Index
 
-- [Architecture & Design Document](file:///c:/Users/91938/OneDrive/Desktop/MenX/docs/architecture.md)
-- [Security Policy & Guidelines](file:///c:/Users/91938/OneDrive/Desktop/MenX/docs/security.md)
-- [Phased Development Plan](file:///c:/Users/91938/OneDrive/Desktop/MenX/docs/development-plan.md)
+- [Architecture & Design Document](docs/architecture.md)
+- [Security Policy & Guidelines](docs/security.md)
+- [Phased Development Plan](docs/development-plan.md)
 
 ---
 

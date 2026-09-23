@@ -5,9 +5,9 @@ export const getOrdersAdminHandler = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { status, search, storeId } = req.query;
+    const { status, search } = req.query;
 
-    const result = await adminOrderService.getOrdersAdmin({ page, limit, status, search, storeId });
+    const result = await adminOrderService.getOrdersAdmin({ page, limit, status, search });
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: result

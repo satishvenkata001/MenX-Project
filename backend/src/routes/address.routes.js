@@ -19,7 +19,7 @@ const addressSchema = z.object({
     landmark: z.string().optional().nullable(),
     city: z.string().min(1, 'City is required'),
     state: z.string().min(1, 'State is required'),
-    postalCode: z.string().min(1, 'Postal code is required'),
+    postalCode: z.string().trim().regex(/^\d{6}$/, 'Postal code must be a valid 6-digit number'),
     addressType: z.enum(['HOME', 'WORK', 'OTHER']).default('HOME'),
     isDefault: z.boolean().default(false)
   })
@@ -100,7 +100,7 @@ router.post('/', requireAuth, validateRequest(addressSchema), asyncHandler(async
       landmark: landmark || null,
       city,
       state,
-      postal_code: postalCode,
+      postal_code: postalCode.trim(),
       address_type: addressType,
       is_default: isDefault
     })
@@ -142,7 +142,7 @@ const updateAddressSchema = z.object({
     landmark: z.string().optional().nullable(),
     city: z.string().min(1, 'City is required').optional(),
     state: z.string().min(1, 'State is required').optional(),
-    postalCode: z.string().min(1, 'Postal code is required').optional(),
+    postalCode: z.string().trim().regex(/^\d{6}$/, 'Postal code must be a valid 6-digit number').optional(),
     addressType: z.enum(['HOME', 'WORK', 'OTHER']).optional(),
     isDefault: z.boolean().optional()
   })
@@ -190,7 +190,7 @@ router.put('/:id', requireAuth, validateRequest(updateAddressSchema), asyncHandl
       landmark: updates.landmark,
       city: updates.city,
       state: updates.state,
-      postal_code: updates.postalCode,
+      postal_code: updates.postalCode !== undefined ? updates.postalCode.trim() : undefined,
       address_type: updates.addressType,
       is_default: updates.isDefault
     })

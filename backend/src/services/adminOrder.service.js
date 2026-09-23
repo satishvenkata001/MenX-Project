@@ -19,16 +19,13 @@ const VALID_TRANSITIONS = {
 /**
  * Returns a paginated list of all orders for admin review
  */
-export const getOrdersAdmin = async ({ page = 1, limit = 10, status, search, storeId }) => {
+export const getOrdersAdmin = async ({ page = 1, limit = 10, status, search }) => {
   let query = supabaseAdmin
     .from('orders')
     .select('*, customer:profiles!orders_customer_id_fkey(first_name, last_name, email)', { count: 'exact' });
 
   if (status) {
     query = query.eq('order_status', status);
-  }
-  if (storeId) {
-    query = query.eq('store_id', storeId);
   }
   if (search) {
     query = query.or(`order_number.ilike.%${search}%,customer_phone.ilike.%${search}%`);
@@ -59,7 +56,40 @@ export const getOrdersAdmin = async ({ page = 1, limit = 10, status, search, sto
 export const getOrderDetailsAdmin = async (orderId) => {
   const { data: order, error } = await supabaseAdmin
     .from('orders')
-    .select('*, order_items(*), customer:profiles!orders_customer_id_fkey(*)')
+    .select(`
+      *,
+      order_items(
+        *,
+        variant:product_variants(
+          id,
+          sku,
+          is_active,
+          product:products(
+            id,
+            title,
+            slug,
+            status,
+            category:categories(id, name, slug),
+            subcategory:subcategories(id, name, slug),
+            brand:brands(id, name, slug, logo_url),
+            images:product_images(id, image_url, alt_text, is_primary, display_order)
+          )
+        )
+      ),
+      customer:profiles!orders_customer_id_fkey(*),
+      return_requests(
+        *,
+        return_items(
+          *,
+          replacement_variant:product_variants!return_items_replacement_variant_id_fkey(
+            id,
+            sku,
+            size:sizes(name),
+            color:colors(name, hex_code)
+          )
+        )
+      )
+    `)
     .eq('id', orderId)
     .single();
 
@@ -85,7 +115,7 @@ export const updateOrderStatus = async (orderId, nextStatus, performedByUserId) 
 
     // 1. Fetch current order status and details under write lock
     const orderRes = await client.query(
-      'SELECT order_status, store_id, customer_id FROM orders WHERE id = $1 FOR UPDATE',
+      'SELECT order_status, customer_id FROM orders WHERE id = $1 FOR UPDATE',
       [orderId]
     );
 
@@ -115,53 +145,53 @@ export const updateOrderStatus = async (orderId, nextStatus, performedByUserId) 
       // Restore stock (re-add to available, subtract from reserved)
       const itemsRes = await client.query('SELECT variant_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of itemsRes.rows) {
+        if (!item.variant_id) continue;
         await client.query(
           `UPDATE inventory_items 
            SET 
              quantity_available = quantity_available + $1, 
              quantity_reserved = quantity_reserved - $1, 
              updated_at = NOW() 
-           WHERE store_id = $2 AND variant_id = $3`,
-          [item.quantity, order.store_id, item.variant_id]
+           WHERE variant_id = $2`,
+          [item.quantity, item.variant_id]
         );
         await client.query(
           `INSERT INTO stock_movements (
              variant_id,
-             source_store_id,
              movement_type,
              quantity,
              reference_type,
              reference_id,
              reason,
              performed_by
-           ) VALUES ($1, $2, 'ONLINE_ORDER_CANCELLED', $3, 'ORDER', $4, 'Order cancelled by admin', $5)`,
-          [item.variant_id, order.store_id, item.quantity, orderId, performedByUserId]
+           ) VALUES ($1, 'ONLINE_ORDER_CANCELLED', $2, 'ORDER', $3, 'Order cancelled by admin', $4)`,
+          [item.variant_id, item.quantity, orderId, performedByUserId]
         );
       }
     } else if (nextStatus === 'DELIVERED') {
       // Consume stock (subtract from reserved)
       const itemsRes = await client.query('SELECT variant_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of itemsRes.rows) {
+        if (!item.variant_id) continue;
         await client.query(
           `UPDATE inventory_items 
            SET 
              quantity_reserved = quantity_reserved - $1, 
              updated_at = NOW() 
-           WHERE store_id = $2 AND variant_id = $3`,
-          [item.quantity, order.store_id, item.variant_id]
+           WHERE variant_id = $2`,
+          [item.quantity, item.variant_id]
         );
         await client.query(
           `INSERT INTO stock_movements (
              variant_id,
-             source_store_id,
              movement_type,
              quantity,
              reference_type,
              reference_id,
              reason,
              performed_by
-           ) VALUES ($1, $2, 'ONLINE_ORDER_FULFILLED', $3, 'ORDER', $4, 'Order delivered', $5)`,
-          [item.variant_id, order.store_id, item.quantity, orderId, performedByUserId]
+           ) VALUES ($1, 'ONLINE_ORDER_FULFILLED', $2, 'ORDER', $3, 'Order delivered', $4)`,
+          [item.variant_id, item.quantity, orderId, performedByUserId]
         );
       }
     } else if (nextStatus === 'RETURNED') {
@@ -182,6 +212,7 @@ export const updateOrderStatus = async (orderId, nextStatus, performedByUserId) 
 
       const itemsRes = await client.query('SELECT id, variant_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of itemsRes.rows) {
+        if (!item.variant_id) continue;
         const alreadyRestocked = restockedMap[item.id] || 0;
         const remainingQty = item.quantity - alreadyRestocked;
 
@@ -191,21 +222,20 @@ export const updateOrderStatus = async (orderId, nextStatus, performedByUserId) 
              SET 
                quantity_available = quantity_available + $1, 
                updated_at = NOW() 
-             WHERE store_id = $2 AND variant_id = $3`,
-            [remainingQty, order.store_id, item.variant_id]
+             WHERE variant_id = $2`,
+            [remainingQty, item.variant_id]
           );
           await client.query(
             `INSERT INTO stock_movements (
                variant_id,
-               source_store_id,
                movement_type,
                quantity,
                reference_type,
                reference_id,
                reason,
                performed_by
-             ) VALUES ($1, $2, 'ONLINE_RETURN', $3, 'ORDER', $4, 'Order returned (bulk fallback)', $5)`,
-            [item.variant_id, order.store_id, remainingQty, orderId, performedByUserId]
+             ) VALUES ($1, 'ONLINE_RETURN', $2, 'ORDER', $3, 'Order returned (bulk fallback)', $4)`,
+            [item.variant_id, remainingQty, orderId, performedByUserId]
           );
         }
       }

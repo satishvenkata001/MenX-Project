@@ -113,41 +113,41 @@ export default function ResetPassword() {
 
   return (
     <BaseLayout>
-      <div className="flex-grow flex items-center justify-center p-6 bg-gradient-to-b from-gray-950 to-gray-900">
-        <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden p-8 space-y-6">
+      <div className="flex-grow flex items-center justify-center p-6 bg-menx-bg">
+        <div className="w-full max-w-md menx-card rounded-2xl shadow-2xl overflow-hidden p-8 space-y-6">
           
           <div className="flex flex-col items-center justify-center space-y-2">
-            <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center text-amber-500">
+            <div className="w-12 h-12 bg-menx-primary/10 border border-menx-primary/30 rounded-xl flex items-center justify-center text-menx-primary">
               <KeyRound className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-extrabold tracking-tight text-white text-center">
               Create New Password
             </h2>
-            <p className="text-xs text-gray-400 text-center">
+            <p className="text-xs text-menx-text-secondary text-center">
               Please enter and confirm your new secure password.
             </p>
           </div>
 
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center space-y-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500"></div>
-              <span className="text-xs text-gray-500 font-medium">Validating security link...</span>
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-menx-primary"></div>
+              <span className="text-xs text-menx-text-muted font-medium">Validating security link...</span>
             </div>
           ) : (
             <>
               {error && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg flex items-start space-x-2 font-medium">
+                <div className="p-4 bg-menx-error/10 border border-menx-error/20 text-menx-error text-xs rounded-lg flex items-start space-x-2 font-medium">
                   <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <span>{getErrorMessage(error)}</span>
                 </div>
               )}
 
               {success && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg flex items-start space-x-2 font-medium">
+                <div className="p-4 bg-menx-success/10 border border-menx-success/20 text-menx-success text-xs rounded-lg flex items-start space-x-2 font-medium">
                   <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p>{success}</p>
-                    <p className="mt-1 text-gray-400">Redirecting to login in 3 seconds...</p>
+                    <p className="mt-1 text-menx-text-secondary">Redirecting to login in 3 seconds...</p>
                   </div>
                 </div>
               )}
@@ -157,15 +157,15 @@ export default function ResetPassword() {
                   <div className="space-y-4">
                     {/* New Password */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-400">New Password</label>
+                      <label className="text-xs font-semibold text-menx-text-secondary">New Password</label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+                        <Lock className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
                         <input
                           type="password"
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
+                          className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
                           placeholder="At least 8 characters"
                         />
                       </div>
@@ -173,15 +173,15 @@ export default function ResetPassword() {
 
                     {/* Confirm New Password */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-400">Confirm Password</label>
+                      <label className="text-xs font-semibold text-menx-text-secondary">Confirm Password</label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+                        <Lock className="absolute left-3 top-3 w-4 h-4 text-menx-text-muted" />
                         <input
                           type="password"
                           required
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-colors"
+                          className="w-full bg-menx-bg border border-menx-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary transition-colors"
                           placeholder="Repeat new password"
                         />
                       </div>
@@ -191,7 +191,7 @@ export default function ResetPassword() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    className="w-full py-3 bg-menx-primary hover:bg-menx-primary-hover disabled:bg-menx-surface-elevated disabled:text-menx-text-muted text-[#0B0F14] font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2"
                   >
                     {submitting ? (
                       <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-black"></div>
@@ -207,7 +207,7 @@ export default function ResetPassword() {
                 <div className="pt-2 text-center">
                   <button
                     onClick={() => navigate('/login')}
-                    className="inline-flex items-center space-x-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+                    className="inline-flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Back to Sign In</span>

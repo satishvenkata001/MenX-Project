@@ -78,6 +78,15 @@ export class AuthController {
   });
 
   /**
+   * POST /api/v1/auth/resend-verification
+   */
+  static resendVerification = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    const result = await AuthService.resendVerification(email);
+    return sendSuccess(res, result, 'Verification link resent successfully.');
+  });
+
+  /**
    * POST /api/v1/auth/resend-otp
    */
   static resendOtp = asyncHandler(async (req, res) => {

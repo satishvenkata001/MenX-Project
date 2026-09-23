@@ -3,6 +3,8 @@ import { pool } from '../config/db.js';
 import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { isSizeValidForCategory } from '../config/categorySizes.js';
+import { searchAndRankProducts } from '../utils/searchHelper.js';
 
 export class CatalogService {
   // Helper to resolve client
@@ -50,6 +52,39 @@ export class CatalogService {
     }
 
     return data || [];
+  }
+
+  /**
+   * List all brands for administrative management with dynamic product counts
+   */
+  static async listAdminBrands() {
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured');
+    }
+
+    try {
+      const { rows } = await pool.query(`
+        SELECT 
+          b.id,
+          b.name,
+          b.slug,
+          b.description,
+          b.logo_url,
+          b.is_active,
+          b.created_at,
+          b.updated_at,
+          COUNT(p.id)::int AS product_count
+        FROM brands b
+        LEFT JOIN products p ON p.brand_id = b.id
+        GROUP BY b.id
+        ORDER BY b.is_active DESC, b.name ASC
+      `);
+
+      return rows || [];
+    } catch (err) {
+      logger.error('Failed to list admin brands', { error: err.message });
+      throw AppError.internal('Failed to retrieve brands');
+    }
   }
 
   /**
@@ -122,7 +157,7 @@ export class CatalogService {
   static async listBrands() {
     const { data, error } = await supabaseAdmin
       .from('brands')
-      .select('id, name, slug, logo_url')
+      .select('id, name, slug, description, logo_url')
       .eq('is_active', true)
       .order('name', { ascending: true });
 
@@ -177,6 +212,87 @@ export class CatalogService {
   }
 
   /**
+   * Helper to normalize HEX code to 6-digit uppercase #RRGGBB
+   */
+  static normalizeHexCode(hex) {
+    if (!hex || typeof hex !== 'string') return '#000000';
+    let clean = hex.trim().toUpperCase();
+    if (!clean.startsWith('#')) {
+      clean = `#${clean}`;
+    }
+    // Expand 3-digit hex #RGB -> #RRGGBB
+    if (clean.length === 4) {
+      clean = `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}`;
+    }
+    return clean;
+  }
+
+  /**
+   * Normalize color name (trim, collapse whitespace)
+   */
+  static normalizeColorName(name) {
+    if (!name || typeof name !== 'string') return '';
+    return name.trim().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Create a new color or return existing if name matches case-insensitively
+   */
+  static async createColor(data, token) {
+    const client = this.getClient(token);
+    const rawName = data.name;
+    const name = this.normalizeColorName(rawName);
+    const rawHex = data.hexCode || data.hex_code;
+    const hexCode = this.normalizeHexCode(rawHex);
+
+    if (!name) {
+      throw AppError.badRequest('Color name is required');
+    }
+    if (name.length > 50) {
+      throw AppError.badRequest('Color name must be at most 50 characters');
+    }
+
+    // 1. Check if color already exists case-insensitively
+    const { data: existing, error: findError } = await client
+      .from('colors')
+      .select('id, name, hex_code, created_at')
+      .ilike('name', name)
+      .maybeSingle();
+
+    if (existing) {
+      return existing;
+    }
+
+    // 2. Insert new color
+    const { data: created, error: insertError } = await client
+      .from('colors')
+      .insert({
+        name,
+        hex_code: hexCode
+      })
+      .select('id, name, hex_code, created_at')
+      .single();
+
+    if (insertError) {
+      // 3. Handle concurrent duplicate creation safely
+      if (insertError.code === '23505') {
+        const { data: retryExisting } = await client
+          .from('colors')
+          .select('id, name, hex_code, created_at')
+          .ilike('name', name)
+          .maybeSingle();
+        if (retryExisting) {
+          return retryExisting;
+        }
+      }
+      logger.error('Failed to create color', { error: insertError.message, name, hexCode });
+      throw AppError.badRequest(insertError.message || 'Failed to create color');
+    }
+
+    return created;
+  }
+
+  /**
    * List published products with search, multi-faceted filtering, sorting, and pagination
    */
   static async listProducts({
@@ -190,39 +306,122 @@ export class CatalogService {
     color,
     minPrice,
     maxPrice,
-    sortBy = 'newest'
+    sortBy = 'newest',
+    status = 'PUBLISHED'
   } = {}) {
-    const offset = (page - 1) * limit;
+    const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+    // Resolve category, subcategory, and brand IDs if slugs are passed
+    let categoryId = null;
+    let subcategoryId = null;
+    let brandId = null;
+
+    const lookups = [];
+    if (category) {
+      if (isUUID(category)) {
+        categoryId = category;
+      } else {
+        lookups.push(
+          supabaseAdmin.from('categories').select('id').eq('slug', category).maybeSingle().then(r => ({ type: 'category', data: r.data }))
+        );
+      }
+    }
+    if (subcategory) {
+      if (isUUID(subcategory)) {
+        subcategoryId = subcategory;
+      } else {
+        lookups.push(
+          supabaseAdmin.from('subcategories').select('id').eq('slug', subcategory).maybeSingle().then(r => ({ type: 'subcategory', data: r.data }))
+        );
+      }
+    }
+    if (brand) {
+      if (isUUID(brand)) {
+        brandId = brand;
+      } else {
+        lookups.push(
+          supabaseAdmin.from('brands').select('id').eq('slug', brand).maybeSingle().then(r => ({ type: 'brand', data: r.data }))
+        );
+      }
+    }
+
+    if (lookups.length > 0) {
+      const results = await Promise.all(lookups);
+      for (const res of results) {
+        if (!res.data) {
+          // Slug not found in database -> return empty list cleanly
+          return {
+            items: [],
+            pagination: {
+              total: 0,
+              page,
+              limit,
+              totalPages: 1,
+              hasNextPage: false,
+              hasPrevPage: false
+            }
+          };
+        }
+        if (res.type === 'category') categoryId = res.data.id;
+        if (res.type === 'subcategory') subcategoryId = res.data.id;
+        if (res.type === 'brand') brandId = res.data.id;
+      }
+    }
+
+    const isSearchActive = Boolean(search && search.trim() !== '');
 
     let query = supabaseAdmin
       .from('products')
       .select(`
-        id, title, slug, description, base_mrp, base_price, material, tags, created_at,
+        id, title, slug, description, status, base_mrp, base_price, material, care_instructions, tags, is_featured, created_at,
         category:categories(id, name, slug),
         subcategory:subcategories(id, name, slug),
         brand:brands(id, name, slug, logo_url),
         images:product_images(id, image_url, alt_text, is_primary, display_order),
         variants:product_variants(id, mrp, selling_price, is_active, size:sizes(id, name, category_type), color:colors(id, name, hex_code))
-      `, { count: 'exact' })
-      .eq('status', 'PUBLISHED');
+      `, { count: 'exact' });
 
-    if (search && search.trim() !== '') {
-      query = query.or(`title.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`);
+    const normalizedStatus = status ? status.toUpperCase() : 'PUBLISHED';
+    if (normalizedStatus !== 'ALL') {
+      query = query.eq('status', normalizedStatus);
     }
 
-    if (sortBy === 'price-asc') {
-      query = query.order('base_price', { ascending: true });
-    } else if (sortBy === 'price-desc') {
-      query = query.order('base_price', { ascending: false });
-    } else if (sortBy === 'name-asc') {
-      query = query.order('title', { ascending: true });
-    } else if (sortBy === 'name-desc') {
-      query = query.order('title', { ascending: false });
-    } else {
-      query = query.order('created_at', { ascending: false });
+    if (categoryId) {
+      query = query.eq('category_id', categoryId);
     }
 
-    query = query.range(offset, offset + limit - 1);
+    if (subcategoryId) {
+      query = query.eq('subcategory_id', subcategoryId);
+    }
+
+    if (brandId) {
+      query = query.eq('brand_id', brandId);
+    }
+
+    if (minPrice !== undefined && !isNaN(Number(minPrice))) {
+      query = query.gte('base_price', Number(minPrice));
+    }
+
+    if (maxPrice !== undefined && !isNaN(Number(maxPrice))) {
+      query = query.lte('base_price', Number(maxPrice));
+    }
+
+    // When NOT searching and no client-side variant filter (size/color), paginate at database level
+    const offset = (page - 1) * limit;
+    if (!isSearchActive && !size && !color) {
+      if (sortBy === 'price-asc') {
+        query = query.order('base_price', { ascending: true });
+      } else if (sortBy === 'price-desc') {
+        query = query.order('base_price', { ascending: false });
+      } else if (sortBy === 'name-asc') {
+        query = query.order('title', { ascending: true });
+      } else if (sortBy === 'name-desc') {
+        query = query.order('title', { ascending: false });
+      } else {
+        query = query.order('created_at', { ascending: false });
+      }
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data: rawProducts, count: totalCount, error } = await query;
 
@@ -232,18 +431,6 @@ export class CatalogService {
     }
 
     let products = rawProducts || [];
-
-    if (category) {
-      products = products.filter(p => p.category?.slug === category || p.category?.id === category);
-    }
-
-    if (subcategory) {
-      products = products.filter(p => p.subcategory?.slug === subcategory || p.subcategory?.id === subcategory);
-    }
-
-    if (brand) {
-      products = products.filter(p => p.brand?.slug === brand || p.brand?.id === brand);
-    }
 
     if (size) {
       products = products.filter(p =>
@@ -257,21 +444,7 @@ export class CatalogService {
       );
     }
 
-    if (minPrice !== undefined) {
-      products = products.filter(p => {
-        const lowestPrice = Math.min(...(p.variants?.map(v => v.selling_price) || [p.base_price]));
-        return lowestPrice >= minPrice;
-      });
-    }
-
-    if (maxPrice !== undefined) {
-      products = products.filter(p => {
-        const lowestPrice = Math.min(...(p.variants?.map(v => v.selling_price) || [p.base_price]));
-        return lowestPrice <= maxPrice;
-      });
-    }
-
-    const items = products.map(p => {
+    const formattedItems = products.map(p => {
       const activeVariants = (p.variants || []).filter(v => v.is_active);
       const minSellingPrice = activeVariants.length > 0
         ? Math.min(...activeVariants.map(v => v.selling_price))
@@ -289,27 +462,52 @@ export class CatalogService {
         id: p.id,
         title: p.title,
         slug: p.slug,
+        description: p.description || '',
         category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
+        category_id: p.category?.id || null,
+        categoryId: p.category?.id || null,
         subcategory: p.subcategory ? { id: p.subcategory.id, name: p.subcategory.name, slug: p.subcategory.slug } : null,
+        subcategory_id: p.subcategory?.id || null,
+        subcategoryId: p.subcategory?.id || null,
         brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
+        brand_id: p.brand?.id || null,
+        brandId: p.brand?.id || null,
         thumbnailUrl: primaryImage?.image_url || null,
         price: {
           mrp: minMrp,
           sellingPrice: minSellingPrice,
-          discountPercent
+          discountPercent,
+          baseMrp: p.base_mrp,
+          basePrice: p.base_price
         },
+        base_mrp: p.base_mrp,
+        baseMrp: p.base_mrp,
+        base_price: p.base_price,
+        basePrice: p.base_price,
+        material: p.material || null,
+        care_instructions: p.care_instructions || null,
+        careInstructions: p.care_instructions || null,
+        status: p.status || 'DRAFT',
+        is_featured: p.is_featured || false,
+        isFeatured: p.is_featured || false,
         availableSizes: [...new Set(activeVariants.map(v => v.size?.name).filter(Boolean))],
         availableColors: [...new Set(activeVariants.map(v => v.color?.name).filter(Boolean))],
         tags: p.tags || [],
-        createdAt: p.created_at
+        createdAt: p.created_at,
+        created_at: p.created_at
       };
     });
 
-    const total = totalCount || items.length;
+    // If search is active or variant filters were applied in memory, use searchAndRankProducts
+    if (isSearchActive || size || color) {
+      return searchAndRankProducts(formattedItems, { search, sortBy, page, limit });
+    }
+
+    const total = totalCount || formattedItems.length;
     const totalPages = Math.ceil(total / limit) || 1;
 
     return {
-      items,
+      items: formattedItems,
       pagination: {
         total,
         page,
@@ -371,14 +569,30 @@ export class CatalogService {
     const variantIds = variants.map(v => v.id);
     let stockMap = {};
     if (variantIds.length > 0) {
-      const { data: stockRecords } = await supabaseAdmin
-        .from('inventory_items')
-        .select('variant_id, quantity_available')
-        .in('variant_id', variantIds);
+      if (pool) {
+        try {
+          const stockRes = await pool.query(
+            'SELECT variant_id, quantity_available FROM inventory_items WHERE variant_id = ANY($1)',
+            [variantIds]
+          );
+          stockRes.rows.forEach(sr => {
+            stockMap[sr.variant_id] = (stockMap[sr.variant_id] || 0) + (sr.quantity_available || 0);
+          });
+        } catch (err) {
+          logger.warn('Direct pool query for product stock failed, falling back to Supabase client', { error: err.message });
+        }
+      }
 
-      (stockRecords || []).forEach(sr => {
-        stockMap[sr.variant_id] = (stockMap[sr.variant_id] || 0) + (sr.quantity_available || 0);
-      });
+      if (Object.keys(stockMap).length === 0) {
+        const { data: stockRecords } = await supabaseAdmin
+          .from('inventory_items')
+          .select('variant_id, quantity_available')
+          .in('variant_id', variantIds);
+
+        (stockRecords || []).forEach(sr => {
+          stockMap[sr.variant_id] = (stockMap[sr.variant_id] || 0) + (sr.quantity_available || 0);
+        });
+      }
     }
 
     const variantsWithAvailability = variants.map(v => {
@@ -491,6 +705,8 @@ export class CatalogService {
         ...v,
         availableStock: totalAvailable,
         quantityAvailable: totalAvailable,
+        quantity_available: totalAvailable,
+        stock: totalAvailable,
         availability
       };
     });
@@ -540,7 +756,18 @@ export class CatalogService {
       isFeatured = false
     } = data;
 
-    // Verify subcategory exists and belongs to categoryId
+    // Verify category exists and is active
+    const { data: validCat, error: catErr } = await supabaseAdmin
+      .from('categories')
+      .select('id, is_active')
+      .eq('id', categoryId)
+      .maybeSingle();
+
+    if (catErr || !validCat || !validCat.is_active) {
+      throw AppError.badRequest('Selected category is invalid or inactive');
+    }
+
+    // Verify subcategory exists, is active, and belongs to categoryId
     const { data: validSub, error: subErr } = await supabaseAdmin
       .from('subcategories')
       .select('id, category_id, is_active')
@@ -548,8 +775,37 @@ export class CatalogService {
       .eq('category_id', categoryId)
       .maybeSingle();
 
-    if (subErr || !validSub) {
-      throw AppError.badRequest('Selected subcategory does not belong to the selected category');
+    if (subErr || !validSub || !validSub.is_active) {
+      throw AppError.badRequest('Selected subcategory does not belong to the selected category or is inactive');
+    }
+
+    // Verify brand exists and is active if brandId is supplied
+    if (brandId) {
+      const { data: validBrand, error: brandErr } = await supabaseAdmin
+        .from('brands')
+        .select('id, is_active')
+        .eq('id', brandId)
+        .maybeSingle();
+
+      if (brandErr || !validBrand || !validBrand.is_active) {
+        throw AppError.badRequest('Selected brand is invalid or inactive');
+      }
+    }
+
+    // Check slug uniqueness
+    const { data: existingSlug } = await supabaseAdmin
+      .from('products')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (existingSlug) {
+      throw AppError.conflict(`Product with slug '${slug}' already exists`);
+    }
+
+    const finalPrice = basePrice !== undefined ? basePrice : baseMrp;
+    if (finalPrice > baseMrp) {
+      throw AppError.badRequest('Base price cannot exceed base MRP');
     }
 
     const { data: product, error } = await client
@@ -561,9 +817,9 @@ export class CatalogService {
         category_id: categoryId,
         subcategory_id: subcategoryId,
         brand_id: brandId || null,
-        status,
+        status: status || 'DRAFT',
         base_mrp: baseMrp,
-        base_price: basePrice !== undefined ? basePrice : baseMrp,
+        base_price: finalPrice,
         material: material || null,
         care_instructions: careInstructions || null,
         tags: tags || [],
@@ -611,14 +867,50 @@ export class CatalogService {
       if (targetCatId && targetSubId) {
         const { data: validSub } = await supabaseAdmin
           .from('subcategories')
-          .select('id')
+          .select('id, is_active')
           .eq('id', targetSubId)
           .eq('category_id', targetCatId)
           .maybeSingle();
 
-        if (!validSub) {
-          throw AppError.badRequest('Selected subcategory does not belong to the selected category');
+        if (!validSub || !validSub.is_active) {
+          throw AppError.badRequest('Selected subcategory does not belong to the selected category or is inactive');
         }
+      }
+    }
+
+    // Validate brand if modified
+    if (data.brandId) {
+      const { data: validBrand } = await supabaseAdmin
+        .from('brands')
+        .select('id, is_active')
+        .eq('id', data.brandId)
+        .maybeSingle();
+
+      if (!validBrand || !validBrand.is_active) {
+        throw AppError.badRequest('Selected brand is invalid or inactive');
+      }
+    }
+
+    // Validate prices if updated
+    if (data.baseMrp !== undefined || data.basePrice !== undefined) {
+      let targetMrp = data.baseMrp;
+      let targetPrice = data.basePrice;
+
+      if (targetMrp === undefined || targetPrice === undefined) {
+        const { data: currentProduct } = await supabaseAdmin
+          .from('products')
+          .select('base_mrp, base_price')
+          .eq('id', id)
+          .single();
+
+        if (currentProduct) {
+          targetMrp = targetMrp !== undefined ? targetMrp : currentProduct.base_mrp;
+          targetPrice = targetPrice !== undefined ? targetPrice : currentProduct.base_price;
+        }
+      }
+
+      if (targetPrice !== undefined && targetMrp !== undefined && targetPrice > targetMrp) {
+        throw AppError.badRequest('Base price cannot exceed base MRP');
       }
     }
 
@@ -687,8 +979,7 @@ export class CatalogService {
       sellingPrice,
       weightGrams = 300,
       lowStockThreshold = 5,
-      initialStock = 0,
-      stockStoreId = null
+      initialStock = 0
     } = data;
 
     // 1. Validate initialStock if provided
@@ -697,74 +988,62 @@ export class CatalogService {
       throw AppError.badRequest('Initial stock must be a non-negative integer');
     }
 
-    // 2. Load the product & verify existence
-    const { data: product, error: prodErr } = await client
-      .from('products')
-      .select('id, category_id, categories:category_id ( id, name, slug )')
-      .eq('id', productId)
-      .single();
+    // 2. Concurrently load product, size, and color validations
+    const [prodRes, sizeRes, colorRes] = await Promise.all([
+      client
+        .from('products')
+        .select('id, category_id, subcategory_id, categories:category_id ( id, name, slug ), subcategories:subcategory_id ( id, name, slug )')
+        .eq('id', productId)
+        .single(),
+      client
+        .from('sizes')
+        .select('id, name, category_type')
+        .eq('id', sizeId)
+        .single(),
+      client
+        .from('colors')
+        .select('id, name, hex_code')
+        .eq('id', colorId)
+        .single()
+    ]);
 
-    if (prodErr || !product) {
+    const product = prodRes.data;
+    if (prodRes.error || !product) {
       throw AppError.notFound(`Product with ID '${productId}' not found`);
     }
 
-    // 3. Load the selected size & verify existence
-    const { data: size, error: sizeErr } = await client
-      .from('sizes')
-      .select('id, name, category_type')
-      .eq('id', sizeId)
-      .single();
-
-    if (sizeErr || !size) {
+    const size = sizeRes.data;
+    if (sizeRes.error || !size) {
       throw AppError.badRequest(`Size with ID '${sizeId}' not found`);
     }
 
-    // 4. Determine expected category_type and validate compatibility
-    const categorySlug = product.categories?.slug?.toLowerCase() || '';
-    const categoryName = product.categories?.name?.toLowerCase() || '';
-    const isFootwear = categorySlug === 'footwear' || categoryName === 'footwear';
-    const expectedCategoryType = isFootwear ? 'FOOTWEAR' : 'APPAREL';
-
-    if (size.category_type !== expectedCategoryType) {
-      throw AppError.badRequest('Selected size is not valid for this product category.');
-    }
-
-    // 5. Load the selected color & verify existence
-    const { data: color, error: colorErr } = await client
-      .from('colors')
-      .select('id, name, hex_code')
-      .eq('id', colorId)
-      .single();
-
-    if (colorErr || !color) {
+    const color = colorRes.data;
+    if (colorRes.error || !color) {
       throw AppError.badRequest(`Color with ID '${colorId}' not found`);
     }
 
-    // 6. If initialStock > 0, validate store
-    let targetStore = null;
-    if (parsedInitialStock > 0) {
-      if (!stockStoreId) {
-        throw AppError.badRequest('Stock store must be selected when initial stock is greater than 0');
-      }
-
-      const { data: store, error: storeErr } = await supabaseAdmin
-        .from('stores')
-        .select('id, name, code, is_active')
-        .eq('id', stockStoreId)
-        .single();
-
-      if (storeErr || !store) {
-        throw AppError.badRequest('Invalid store specified for initial stock');
-      }
-
-      if (!store.is_active) {
-        throw AppError.badRequest('Selected store is inactive and cannot receive stock');
-      }
-
-      targetStore = store;
+    // 3. Validate category-specific size compatibility
+    const isValidSize = isSizeValidForCategory(product.categories, size.name, size.category_type, product.subcategories);
+    if (!isValidSize) {
+      const categoryTitle = product.categories?.name || product.categories?.slug || 'this';
+      throw AppError.badRequest(`Selected size '${size.name}' is not valid for product category '${categoryTitle}'.`);
     }
 
-    // 7. Insert the variant record
+    // 4. Prevent duplicate active variant for the same product, size, and color
+    const { data: existingActive } = await client
+      .from('product_variants')
+      .select('id, is_active')
+      .eq('product_id', productId)
+      .eq('size_id', sizeId)
+      .eq('color_id', colorId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (existingActive) {
+      throw AppError.conflict('An active variant already exists for this size and color.');
+    }
+
+    // 5. Insert the variant record
     const { data: variant, error } = await client
       .from('product_variants')
       .insert({
@@ -787,56 +1066,58 @@ export class CatalogService {
 
     if (error) {
       if (error.code === '23505') {
-        throw AppError.conflict(`Variant with SKU '${sku}', barcode, or size/color combination already exists`);
+        if (error.message?.includes('sku') || error.detail?.includes('sku')) {
+          throw AppError.conflict(`Variant with SKU '${sku}' already exists.`);
+        }
+        if (error.message?.includes('barcode') || error.detail?.includes('barcode')) {
+          throw AppError.conflict(`Variant with barcode '${barcode}' already exists.`);
+        }
+        throw AppError.conflict('An active variant already exists for this size and color.');
       }
       throw AppError.badRequest(error.message || 'Failed to create variant');
     }
 
-    // 8. If initialStock > 0, create inventory_items and stock_movements ledger entry
-    if (parsedInitialStock > 0 && targetStore) {
-      try {
-        const { data: inventoryItem, error: invErr } = await supabaseAdmin
-          .from('inventory_items')
-          .insert({
-            store_id: targetStore.id,
-            variant_id: variant.id,
-            quantity_available: parsedInitialStock,
-            quantity_reserved: 0,
-            quantity_damaged: 0
-          })
-          .select()
-          .single();
+    // 7. Create 1:1 authoritative inventory_items record
+    const stockQty = parsedInitialStock || 0;
+    try {
+      const { data: inventoryItem, error: invErr } = await supabaseAdmin
+        .from('inventory_items')
+        .insert({
+          variant_id: variant.id,
+          quantity_available: stockQty,
+          quantity_reserved: 0,
+          quantity_damaged: 0
+        })
+        .select()
+        .single();
 
-        if (invErr || !inventoryItem) {
-          logger.error('Failed to create inventory_items for new variant', { error: invErr?.message });
-          // Cleanup newly created variant to ensure atomicity
-          await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
-          throw AppError.internal('Failed to initialize inventory for the new variant');
-        }
+      if (invErr || !inventoryItem) {
+        logger.error('Failed to create inventory_items for new variant', { error: invErr?.message });
+        await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
+        throw AppError.internal('Failed to initialize inventory for the new variant');
+      }
 
+      if (stockQty > 0) {
         const { error: moveErr } = await supabaseAdmin
           .from('stock_movements')
           .insert({
             variant_id: variant.id,
-            source_store_id: targetStore.id,
-            destination_store_id: null,
-            movement_type: 'PURCHASE_RECEIPT',
-            quantity: parsedInitialStock,
+            movement_type: 'INITIAL_STOCK',
+            quantity: stockQty,
             reference_type: 'INITIAL_STOCK',
-            reason: 'Initial stock receipt'
+            reason: 'Initial stock on variant creation'
           });
 
         if (moveErr) {
           logger.warn('Failed to record stock movement for initial stock', { error: moveErr.message });
         }
-      } catch (err) {
-        // Rollback variant if inventory creation threw
-        await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
-        throw err;
       }
+    } catch (err) {
+      await supabaseAdmin.from('product_variants').delete().eq('id', variant.id);
+      throw err;
     }
 
-    const availableStock = parsedInitialStock || 0;
+    const availableStock = stockQty;
     const threshold = variant.low_stock_threshold ?? 5;
     let availability = 'OUT_OF_STOCK';
     if (availableStock > threshold) {
@@ -849,6 +1130,8 @@ export class CatalogService {
       ...variant,
       availableStock,
       quantityAvailable: availableStock,
+      quantity_available: availableStock,
+      stock: availableStock,
       availability
     };
   }
@@ -1176,55 +1459,163 @@ export class CatalogService {
    * Create a new brand
    */
   static async createBrand(data, token) {
-    const client = this.getClient(token);
-    const { name, slug, logoUrl } = data;
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured');
+    }
 
-    const { data: brand, error } = await client
-      .from('brands')
-      .insert({
-        name,
-        slug,
-        logo_url: logoUrl || null
-      })
-      .select()
-      .single();
+    const name = data.name?.trim();
+    const slug = data.slug?.trim();
+    const description = data.description !== undefined ? (data.description ? data.description.trim() : null) : null;
+    const logoUrl = data.logoUrl || null;
+    const isActive = data.isActive !== undefined ? data.isActive : true;
 
-    if (error) {
+    if (!name) throw AppError.badRequest('Brand name is required');
+    if (!slug) throw AppError.badRequest('Brand slug is required');
+
+    // Check duplicate name case-insensitively
+    const existingName = await pool.query('SELECT id FROM brands WHERE LOWER(name) = LOWER($1)', [name]);
+    if (existingName.rows.length > 0) {
+      throw AppError.conflict(`Brand with name '${name}' already exists`);
+    }
+
+    // Check duplicate slug
+    const existingSlug = await pool.query('SELECT id FROM brands WHERE slug = $1', [slug]);
+    if (existingSlug.rows.length > 0) {
+      throw AppError.conflict(`Brand with slug '${slug}' already exists`);
+    }
+
+    try {
+      const insertRes = await pool.query(`
+        INSERT INTO brands (name, slug, description, logo_url, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        RETURNING id, name, slug, description, logo_url, is_active, created_at, updated_at
+      `, [name, slug, description, logoUrl, isActive]);
+
+      return insertRes.rows[0];
+    } catch (error) {
       if (error.code === '23505') {
         throw AppError.conflict(`Brand with slug '${slug}' already exists`);
       }
+      logger.error('Failed to create brand', { error: error.message });
       throw AppError.badRequest(error.message || 'Failed to create brand');
     }
-
-    return brand;
   }
 
   /**
    * Update brand
    */
   static async updateBrand(id, data, token) {
-    const client = this.getClient(token);
-    const updatePayload = {};
-    if (data.name !== undefined) updatePayload.name = data.name;
-    if (data.slug !== undefined) updatePayload.slug = data.slug;
-    if (data.logoUrl !== undefined) updatePayload.logo_url = data.logoUrl;
-    if (data.isActive !== undefined) updatePayload.is_active = data.isActive;
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured');
+    }
 
-    const { data: updated, error } = await client
-      .from('brands')
-      .update(updatePayload)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error || !updated) {
-      if (error?.code === '23505') {
-        throw AppError.conflict(`Brand slug '${data.slug}' is already in use`);
-      }
+    // Verify brand exists
+    const existingRes = await pool.query('SELECT id, name, slug FROM brands WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
       throw AppError.notFound(`Brand with ID '${id}' not found`);
     }
 
-    return updated;
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) throw AppError.badRequest('Brand name cannot be empty');
+      // Check duplicate name excluding self
+      const nameCheck = await pool.query('SELECT id FROM brands WHERE LOWER(name) = LOWER($1) AND id != $2', [name, id]);
+      if (nameCheck.rows.length > 0) {
+        throw AppError.conflict(`Brand with name '${name}' already exists`);
+      }
+      updates.push(`name = $${idx++}`);
+      values.push(name);
+    }
+
+    if (data.slug !== undefined) {
+      const slug = data.slug.trim();
+      if (!slug) throw AppError.badRequest('Brand slug cannot be empty');
+      // Check duplicate slug excluding self
+      const slugCheck = await pool.query('SELECT id FROM brands WHERE slug = $1 AND id != $2', [slug, id]);
+      if (slugCheck.rows.length > 0) {
+        throw AppError.conflict(`Brand with slug '${slug}' already exists`);
+      }
+      updates.push(`slug = $${idx++}`);
+      values.push(slug);
+    }
+
+    if (data.description !== undefined) {
+      updates.push(`description = $${idx++}`);
+      values.push(data.description ? data.description.trim() : null);
+    }
+
+    if (data.logoUrl !== undefined) {
+      updates.push(`logo_url = $${idx++}`);
+      values.push(data.logoUrl || null);
+    }
+
+    if (data.isActive !== undefined) {
+      updates.push(`is_active = $${idx++}`);
+      values.push(Boolean(data.isActive));
+    }
+
+    if (updates.length === 0) {
+      throw AppError.badRequest('No fields provided to update');
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    try {
+      const updateQuery = `
+        UPDATE brands 
+        SET ${updates.join(', ')}
+        WHERE id = $${idx}
+        RETURNING id, name, slug, description, logo_url, is_active, created_at, updated_at
+      `;
+      const result = await pool.query(updateQuery, values);
+      return result.rows[0];
+    } catch (error) {
+      if (error?.code === '23505') {
+        throw AppError.conflict(`Brand slug '${data.slug}' is already in use`);
+      }
+      logger.error('Failed to update brand', { error: error.message });
+      throw AppError.badRequest(error.message || 'Failed to update brand');
+    }
+  }
+
+  /**
+   * Delete brand safely (only if no products reference it)
+   */
+  static async deleteBrand(id, actor = null, token = null, reqInfo = {}) {
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured');
+    }
+
+    // 1. Check brand existence
+    const brandRes = await pool.query('SELECT id, name, slug FROM brands WHERE id = $1', [id]);
+    if (brandRes.rows.length === 0) {
+      throw AppError.notFound(`Brand with ID '${id}' not found`);
+    }
+    const brand = brandRes.rows[0];
+
+    // 2. Check if brand is referenced by existing products
+    const prodCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM products WHERE brand_id = $1', [id]);
+    const productCount = prodCountRes.rows[0]?.count || 0;
+
+    if (productCount > 0) {
+      throw AppError.badRequest(`Cannot delete this brand because it is currently used by ${productCount} products. Deactivate it instead.`);
+    }
+
+    // 3. Perform non-destructive deletion of the brand record
+    await pool.query('DELETE FROM brands WHERE id = $1', [id]);
+
+    logger.info(`Brand deleted successfully: ${brand.name} (${id}) by ${actor?.role || 'SUPER_ADMIN'}`);
+
+    return {
+      id,
+      name: brand.name,
+      message: 'Brand deleted successfully'
+    };
   }
 
   /**

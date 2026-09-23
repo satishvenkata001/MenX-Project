@@ -41,10 +41,12 @@ export class WishlistService {
       .select(`
         id, product_id, created_at,
         product:products(
-          id, title, slug, status, base_mrp, base_price,
+          id, title, slug, status, base_mrp, base_price, description,
           category:categories(id, name, slug),
-          brand:brands(id, name, slug),
-          images:product_images(image_url, is_primary, display_order)
+          subcategory:subcategories(id, name, slug),
+          brand:brands(id, name, slug, logo_url),
+          images:product_images(id, image_url, alt_text, is_primary, display_order),
+          variants:product_variants(id, mrp, selling_price, is_active)
         )
       `)
       .eq('wishlist_id', wishlist.id)
@@ -55,34 +57,104 @@ export class WishlistService {
       throw AppError.internal('Failed to retrieve wishlist items');
     }
 
-    const items = (rawItems || [])
-      .filter(item => item.product && item.product.status === 'PUBLISHED')
-      .map(item => {
-        const p = item.product;
-        const primaryImage = (p.images || []).sort(
-          (a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || a.display_order - b.display_order
-        )[0];
-
-        const discountPercent = p.base_mrp > p.base_price
-          ? Math.round(((p.base_mrp - p.base_price) / p.base_mrp) * 100)
-          : 0;
-
+    const items = (rawItems || []).map(item => {
+      const p = item.product;
+      if (!p) {
         return {
           id: item.id,
-          productId: p.id,
-          title: p.title,
-          slug: p.slug,
-          thumbnailUrl: primaryImage?.image_url || null,
-          category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-          brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
+          productId: item.product_id,
+          product_id: item.product_id,
+          title: 'Product Unavailable',
+          slug: null,
+          status: 'UNAVAILABLE',
+          description: null,
+          thumbnailUrl: null,
+          imageUrl: null,
+          category: null,
+          subcategory: null,
+          brand: null,
           price: {
-            mrp: p.base_mrp,
-            sellingPrice: p.base_price,
-            discountPercent
+            mrp: 0,
+            sellingPrice: 0,
+            discountPercent: 0
           },
-          addedAt: item.created_at
+          base_mrp: 0,
+          base_price: 0,
+          mrp: 0,
+          sellingPrice: 0,
+          selling_price: 0,
+          variants: [],
+          images: [],
+          addedAt: item.created_at,
+          created_at: item.created_at,
+          product: null
         };
-      });
+      }
+
+      const imagesList = p.images || [];
+      const primaryImage = [...imagesList].sort(
+        (a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.display_order ?? 0) - (b.display_order ?? 0)
+      )[0];
+
+      const discountPercent = Number(p.base_mrp) > Number(p.base_price)
+        ? Math.round(((Number(p.base_mrp) - Number(p.base_price)) / Number(p.base_mrp)) * 100)
+        : 0;
+
+      const productSummary = {
+        id: p.id,
+        productId: p.id,
+        product_id: p.id,
+        title: p.title,
+        slug: p.slug,
+        status: p.status,
+        description: p.description,
+        thumbnailUrl: primaryImage?.image_url || null,
+        imageUrl: primaryImage?.image_url || null,
+        category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
+        subcategory: p.subcategory ? { id: p.subcategory.id, name: p.subcategory.name, slug: p.subcategory.slug } : null,
+        brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug, logoUrl: p.brand.logo_url } : null,
+        price: {
+          mrp: Number(p.base_mrp),
+          sellingPrice: Number(p.base_price),
+          discountPercent
+        },
+        base_mrp: Number(p.base_mrp),
+        base_price: Number(p.base_price),
+        mrp: Number(p.base_mrp),
+        sellingPrice: Number(p.base_price),
+        selling_price: Number(p.base_price),
+        variants: p.variants || [],
+        images: imagesList,
+        addedAt: item.created_at,
+        created_at: item.created_at
+      };
+
+      return {
+        id: item.id,
+        productId: p.id,
+        product_id: p.id,
+        title: p.title,
+        slug: p.slug,
+        status: p.status,
+        description: p.description,
+        thumbnailUrl: primaryImage?.image_url || null,
+        imageUrl: primaryImage?.image_url || null,
+        category: productSummary.category,
+        subcategory: productSummary.subcategory,
+        brand: productSummary.brand,
+        price: productSummary.price,
+        base_mrp: Number(p.base_mrp),
+        base_price: Number(p.base_price),
+        mrp: Number(p.base_mrp),
+        sellingPrice: Number(p.base_price),
+        selling_price: Number(p.base_price),
+        variants: p.variants || [],
+        images: imagesList,
+        addedAt: item.created_at,
+        created_at: item.created_at,
+        product: productSummary
+      };
+    });
 
     return {
       wishlistId: wishlist.id,
@@ -95,21 +167,29 @@ export class WishlistService {
    * Add a product to the customer's wishlist
    */
   static async addToWishlist(userId, productId) {
-    // 1. Verify product exists and is PUBLISHED
-    const { data: product, error: prodErr } = await supabaseAdmin
-      .from('products')
-      .select('id, title, slug, status')
-      .eq('id', productId)
-      .single();
+    // 1. Concurrently verify product exists and retrieve/initialize wishlist
+    const [prodRes, wishlist] = await Promise.all([
+      supabaseAdmin
+        .from('products')
+        .select(`
+          id, title, slug, status, base_mrp, base_price, description,
+          category:categories(id, name, slug),
+          subcategory:subcategories(id, name, slug),
+          brand:brands(id, name, slug, logo_url),
+          images:product_images(id, image_url, alt_text, is_primary, display_order),
+          variants:product_variants(id, mrp, selling_price, is_active)
+        `)
+        .eq('id', productId)
+        .single(),
+      this.getOrCreateWishlist(userId)
+    ]);
 
-    if (prodErr || !product || product.status !== 'PUBLISHED') {
+    const product = prodRes.data;
+    if (prodRes.error || !product || product.status !== 'PUBLISHED') {
       throw AppError.badRequest('Product not found or not currently available');
     }
 
-    // 2. Get or initialize wishlist
-    const wishlist = await this.getOrCreateWishlist(userId);
-
-    // 3. Check for existing item to avoid duplicate errors
+    // 2. Check for existing item to avoid duplicate errors
     const { data: existing } = await supabaseAdmin
       .from('wishlist_items')
       .select('id, product_id, created_at')
@@ -120,11 +200,15 @@ export class WishlistService {
     if (existing) {
       return {
         message: 'Product is already in your wishlist',
-        item: existing
+        item: {
+          ...existing,
+          product_id: productId,
+          product
+        }
       };
     }
 
-    // 4. Insert wishlist item
+    // 3. Insert wishlist item
     const { data: newItem, error: insertErr } = await supabaseAdmin
       .from('wishlist_items')
       .insert({
@@ -141,7 +225,11 @@ export class WishlistService {
 
     return {
       message: 'Product added to wishlist successfully',
-      item: newItem
+      item: {
+        ...newItem,
+        product_id: productId,
+        product
+      }
     };
   }
 

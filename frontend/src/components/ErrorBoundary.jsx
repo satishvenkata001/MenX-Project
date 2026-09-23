@@ -48,20 +48,20 @@ export default class ErrorBoundary extends React.Component {
       }
 
       return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl text-center space-y-6 animate-in fade-in duration-300">
+        <div className="min-h-screen bg-menx-bg text-menx-text flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-menx-surface border border-menx-border rounded-2xl p-8 shadow-2xl text-center space-y-6 animate-in fade-in duration-300">
             
             {/* Icon Banner */}
-            <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center mx-auto text-amber-500 shadow-lg shadow-amber-500/5">
+            <div className="w-16 h-16 bg-menx-primary/10 border border-menx-primary/20 rounded-2xl flex items-center justify-center mx-auto text-menx-primary shadow-lg shadow-menx-primary/5">
               <AlertTriangle className="w-8 h-8" />
             </div>
 
             {/* Content */}
             <div className="space-y-2">
-              <h1 className="text-xl font-black text-white tracking-tight">
+              <h1 className="text-xl font-black text-menx-text tracking-tight">
                 Something went wrong
               </h1>
-              <p className="text-xs text-gray-400 leading-relaxed">
+              <p className="text-xs text-menx-text-secondary leading-relaxed">
                 We encountered an unexpected interface error. Your account data and session remain secure.
               </p>
             </div>
@@ -71,7 +71,7 @@ export default class ErrorBoundary extends React.Component {
               <button
                 type="button"
                 onClick={this.handleReset}
-                className="flex-1 py-2.5 px-4 bg-amber-500 hover:bg-amber-600 active:scale-95 text-black font-extrabold text-xs rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md shadow-amber-500/10 cursor-pointer"
+                className="flex-1 py-2.5 px-4 bg-menx-primary hover:bg-menx-primary-hover active:scale-95 text-[#0B0F14] font-extrabold text-xs rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md shadow-menx-primary/10 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Try Again</span>
@@ -80,7 +80,7 @@ export default class ErrorBoundary extends React.Component {
               <button
                 type="button"
                 onClick={this.handleGoHome}
-                className="flex-1 py-2.5 px-4 bg-gray-800 hover:bg-gray-750 active:scale-95 text-gray-200 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-2 border border-gray-700 transition-all cursor-pointer"
+                className="flex-1 py-2.5 px-4 bg-menx-surface-elevated hover:bg-menx-border active:scale-95 text-menx-text font-bold text-xs rounded-xl flex items-center justify-center space-x-2 border border-menx-border transition-all cursor-pointer"
               >
                 <Home className="w-3.5 h-3.5" />
                 <span>Go Home</span>
@@ -89,8 +89,8 @@ export default class ErrorBoundary extends React.Component {
 
             {/* Development-only error snippet preview */}
             {import.meta.env.DEV && this.state.error && (
-              <div className="text-left bg-gray-950 border border-gray-800/80 rounded-xl p-3 text-[10px] font-mono text-red-400 overflow-x-auto max-h-32">
-                <span className="font-bold text-gray-400 block mb-1">Dev Debug:</span>
+              <div className="text-left bg-menx-bg border border-menx-border rounded-xl p-3 text-[10px] font-mono text-menx-error overflow-x-auto max-h-32">
+                <span className="font-bold text-menx-text-secondary block mb-1">Dev Debug:</span>
                 {this.state.error.toString()}
               </div>
             )}

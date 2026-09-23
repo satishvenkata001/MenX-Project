@@ -9,8 +9,7 @@ import {
   adjustStockSchema,
   inventoryQuerySchema,
   reserveInventorySchema,
-  stockMovementQuerySchema,
-  transferStockSchema
+  stockMovementQuerySchema
 } from '../validators/inventory.validator.js';
 
 const router = Router();
@@ -25,19 +24,14 @@ router.use(
   )
 );
 
-// Stores List
-router.get('/stores', InventoryController.listStores);
-
 // Inventory Queries
 router.get('/inventory', validateRequest(inventoryQuerySchema), InventoryController.listInventory);
 router.get('/inventory/low-stock', validateRequest(inventoryQuerySchema), InventoryController.getLowStock);
 router.get('/inventory/movements', validateRequest(stockMovementQuerySchema), InventoryController.listStockMovements);
 router.get('/inventory/:id', validateRequest(idParamSchema), InventoryController.getInventoryById);
-router.get('/inventory/store/:storeId', InventoryController.getInventoryByStore);
 
 // Inventory Mutations
 router.post('/inventory/adjust', validateRequest(adjustStockSchema), InventoryController.adjustStock);
-router.post('/inventory/transfer', validateRequest(transferStockSchema), InventoryController.transferStock);
 router.post('/inventory/reserve', validateRequest(reserveInventorySchema), InventoryController.reserveInventory);
 
 export default router;

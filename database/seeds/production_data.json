@@ -79,51 +79,30 @@
     }
   ],
   "sizes": [
-    {
-      "name": "S",
-      "category_type": "APPAREL",
-      "sort_order": 1
-    },
-    {
-      "name": "M",
-      "category_type": "APPAREL",
-      "sort_order": 2
-    },
-    {
-      "name": "L",
-      "category_type": "APPAREL",
-      "sort_order": 3
-    },
-    {
-      "name": "XL",
-      "category_type": "APPAREL",
-      "sort_order": 4
-    },
-    {
-      "name": "XXL",
-      "category_type": "APPAREL",
-      "sort_order": 5
-    },
-    {
-      "name": "8",
-      "category_type": "FOOTWEAR",
-      "sort_order": 1
-    },
-    {
-      "name": "9",
-      "category_type": "FOOTWEAR",
-      "sort_order": 2
-    },
-    {
-      "name": "10",
-      "category_type": "FOOTWEAR",
-      "sort_order": 3
-    },
-    {
-      "name": "11",
-      "category_type": "FOOTWEAR",
-      "sort_order": 4
-    }
+    { "name": "XS", "category_type": "APPAREL", "sort_order": 1 },
+    { "name": "S", "category_type": "APPAREL", "sort_order": 2 },
+    { "name": "M", "category_type": "APPAREL", "sort_order": 3 },
+    { "name": "L", "category_type": "APPAREL", "sort_order": 4 },
+    { "name": "XL", "category_type": "APPAREL", "sort_order": 5 },
+    { "name": "XXL", "category_type": "APPAREL", "sort_order": 6 },
+    { "name": "XXXL", "category_type": "APPAREL", "sort_order": 7 },
+    { "name": "28", "category_type": "BOTTOMWEAR", "sort_order": 1 },
+    { "name": "30", "category_type": "BOTTOMWEAR", "sort_order": 2 },
+    { "name": "32", "category_type": "BOTTOMWEAR", "sort_order": 3 },
+    { "name": "34", "category_type": "BOTTOMWEAR", "sort_order": 4 },
+    { "name": "36", "category_type": "BOTTOMWEAR", "sort_order": 5 },
+    { "name": "38", "category_type": "BOTTOMWEAR", "sort_order": 6 },
+    { "name": "40", "category_type": "BOTTOMWEAR", "sort_order": 7 },
+    { "name": "42", "category_type": "BOTTOMWEAR", "sort_order": 8 },
+    { "name": "44", "category_type": "BOTTOMWEAR", "sort_order": 9 },
+    { "name": "6", "category_type": "FOOTWEAR", "sort_order": 1 },
+    { "name": "7", "category_type": "FOOTWEAR", "sort_order": 2 },
+    { "name": "8", "category_type": "FOOTWEAR", "sort_order": 3 },
+    { "name": "9", "category_type": "FOOTWEAR", "sort_order": 4 },
+    { "name": "10", "category_type": "FOOTWEAR", "sort_order": 5 },
+    { "name": "11", "category_type": "FOOTWEAR", "sort_order": 6 },
+    { "name": "12", "category_type": "FOOTWEAR", "sort_order": 7 },
+    { "name": "One Size", "category_type": "ACCESSORIES", "sort_order": 1 }
   ],
   "colors": [
     {
