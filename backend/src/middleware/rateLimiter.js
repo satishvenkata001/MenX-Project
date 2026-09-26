@@ -12,7 +12,7 @@ export const globalLimiter = rateLimit({
   legacyHeaders: false,
   handler: (req, res, next) => {
     next(
-      AppError.forbidden(
+      AppError.tooManyRequests(
         `Too many requests from this IP. Please try again after ${Math.ceil(
           env.RATE_LIMIT_WINDOW_MS / 60000
         )} minutes.`
@@ -31,7 +31,7 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: (req, res, next) => {
     next(
-      AppError.forbidden(
+      AppError.tooManyRequests(
         'Too many authentication attempts from this IP. Please try again after 15 minutes.'
       )
     );

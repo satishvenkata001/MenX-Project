@@ -7,8 +7,13 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { AppError } from './utils/appError.js';
 import apiRoutes from './routes/index.js';
+import healthRoutes from './routes/health.routes.js';
 
 const app = express();
+
+// Enable trust proxy (1 hop) for reverse proxy deployments (Render, Cloudflare, AWS ALB)
+// Ensures req.ip correctly resolves the client IP from X-Forwarded-For
+app.set('trust proxy', 1);
 
 // 1. Security Headers
 app.use(helmet({
@@ -89,10 +94,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // 4. Request Logging Middleware
 app.use(requestLogger);
 
-// 5. Global Rate Limiting
+// 5. Public / System Health Check (Bypasses global rate limiter for Render & cloud health probes)
+app.use('/health', healthRoutes);
+app.use('/api/v1/health', healthRoutes);
+
+// 6. Global Rate Limiting (Protects all standard API endpoints)
 app.use('/api', globalLimiter);
 
-// 6. Mount REST API v1
+// 7. Mount REST API v1
 app.use('/api/v1', apiRoutes);
 
 // 7. Undefined Route (404) Handler

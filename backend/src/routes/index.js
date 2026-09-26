@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';
-import healthRoutes from './health.routes.js';
 import catalogRoutes from './catalog.routes.js';
 import adminCatalogRoutes from './adminCatalog.routes.js';
 import inventoryRoutes from './inventory.routes.js';
@@ -19,7 +18,6 @@ import adminDeliveryZoneRoutes from './adminDeliveryZone.routes.js';
 const apiRouter = Router();
 
 // Mount Sub-routers
-apiRouter.use('/health', healthRoutes);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/cart', cartRoutes);
 apiRouter.use('/wishlist', wishlistRoutes);

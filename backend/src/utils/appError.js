@@ -23,6 +23,10 @@ export class AppError extends Error {
     return new AppError(msg, HTTP_STATUS.FORBIDDEN, details);
   }
 
+  static tooManyRequests(msg = 'Too many requests: Rate limit exceeded', details = null) {
+    return new AppError(msg, HTTP_STATUS.TOO_MANY_REQUESTS, details);
+  }
+
   static notFound(msg = 'Resource not found', details = null) {
     return new AppError(msg, HTTP_STATUS.NOT_FOUND, details);
   }

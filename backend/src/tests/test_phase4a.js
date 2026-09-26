@@ -168,8 +168,9 @@ async function runPhase4ATests() {
     const notFoundRes = await fetch(`${baseUrl}/non-existent-route`);
     await assert('Undefined route returns HTTP 404', notFoundRes.status === 404);
 
-    const rateLimitHeader = healthRes.headers.get('ratelimit-limit');
-    await assert('Response includes rate limit headers', rateLimitHeader !== null);
+    const notFoundRateLimitHeader = notFoundRes.headers.get('ratelimit-limit');
+    await assert('Standard API response includes rate limit headers', notFoundRateLimitHeader !== null);
+    await assert('Health check response bypasses rate limiter (no ratelimit header)', healthRes.headers.get('ratelimit-limit') === null);
 
   } catch (err) {
     console.error('[TEST SUITE EXCEPTION]', err);
