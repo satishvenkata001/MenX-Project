@@ -10,17 +10,24 @@ function ProductCardComponent({
   thumbnailUrl,
   brandName,
   categoryName,
+  categorySlug,
   subcategoryName,
   description,
   sellingPrice,
   mrp,
   hasDiscount,
   wishlistActive,
-  onWishlistToggle
+  onWishlistToggle,
+  isPriority = false
 }) {
   return (
     <Link
       to={`/products/${slug}`}
+      state={{
+        categorySlug: categorySlug || '',
+        categoryName: categoryName || '',
+        productId: id
+      }}
       className="group menx-card-interactive rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl flex flex-col relative min-w-0 w-full"
     >
       {/* Image Area with intrinsic aspect ratio */}
@@ -31,7 +38,8 @@ function ProductCardComponent({
             alt={title}
             width="300"
             height="375"
-            loading="lazy"
+            loading={isPriority ? "eager" : "lazy"}
+            fetchPriority={isPriority ? "high" : "auto"}
             decoding="async"
             onError={(e) => {
               e.target.onerror = null;

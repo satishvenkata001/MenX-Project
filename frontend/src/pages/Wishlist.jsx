@@ -95,8 +95,17 @@ const WishlistCard = memo(function WishlistCard({ item, onRemove }) {
   );
 
   if (isAvailable) {
+    const catSlug = product.category?.slug || (typeof product.category === 'string' ? product.category : '') || '';
     return (
-      <Link to={`/products/${slug}`} className="block h-full min-w-0 group">
+      <Link
+        to={`/products/${slug}`}
+        state={{
+          categorySlug: catSlug,
+          categoryName: categoryName || '',
+          productId: productId
+        }}
+        className="block h-full min-w-0 group"
+      >
         {cardContent}
       </Link>
     );

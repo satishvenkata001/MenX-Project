@@ -1,0 +1,6 @@
+# Cloudflare Pages / Netlify / Render static headers specification
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  Cache-Control: no-cache, no-store, must-revalidate

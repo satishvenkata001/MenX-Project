@@ -148,6 +148,7 @@ export async function getCachedProductDetail(slug, forceRefresh = false, options
         timestamp: Date.now(),
         pending: null
       });
+      recordProductMeta(product);
       return product;
     })
     .catch(err => {
@@ -172,11 +173,98 @@ export async function getCachedProductDetail(slug, forceRefresh = false, options
 }
 
 /**
+ * In-memory mapping of product slug -> { id, slug, title, thumbnailUrl, categorySlug, categoryName }
+ */
+const productMetaCache = new Map();
+const MAX_META_CACHE_ENTRIES = 100;
+
+export function recordProductMeta(item) {
+  if (!item || !item.slug) return;
+  const catSlug = item.category?.slug || (typeof item.category === 'string' ? item.category : '') || item.categorySlug || '';
+  const catName = item.category?.name || item.categoryName || '';
+
+  if (productMetaCache.size >= MAX_META_CACHE_ENTRIES) {
+    const oldestKey = productMetaCache.keys().next().value;
+    if (oldestKey) productMetaCache.delete(oldestKey);
+  }
+
+  productMetaCache.set(item.slug, {
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    thumbnailUrl: item.thumbnailUrl,
+    categorySlug: catSlug,
+    categoryName: catName
+  });
+}
+
+export function getRecordedProductMeta(slug) {
+  if (!slug) return null;
+  return productMetaCache.get(slug) || null;
+}
+
+// In-memory cache for similar products by category slug (2 minute TTL)
+const similarProductsCache = new Map();
+const SIMILAR_CACHE_TTL_MS = 2 * 60 * 1000;
+const MAX_SIMILAR_CACHE_ENTRIES = 20;
+
+export async function getCachedSimilarProducts(categorySlug, options = {}) {
+  const cacheKey = categorySlug || '__all__';
+  const now = Date.now();
+  const cached = similarProductsCache.get(cacheKey);
+
+  if (cached && cached.data && (now - cached.timestamp < SIMILAR_CACHE_TTL_MS)) {
+    return cached.data;
+  }
+
+  if (cached && cached.pending) {
+    return cached.pending;
+  }
+
+  const queryUrl = categorySlug ? `/products?category=${encodeURIComponent(categorySlug)}&limit=5` : '/products?limit=5';
+  const pending = api.get(queryUrl, options)
+    .then(res => {
+      const list = Array.isArray(res.data) ? res.data : (res.data?.products || []);
+      if (similarProductsCache.size >= MAX_SIMILAR_CACHE_ENTRIES) {
+        const oldest = similarProductsCache.keys().next().value;
+        if (oldest) similarProductsCache.delete(oldest);
+      }
+      similarProductsCache.set(cacheKey, {
+        data: list,
+        timestamp: Date.now(),
+        pending: null
+      });
+      return list;
+    })
+    .catch(err => {
+      if (cached) {
+        cached.pending = null;
+        if (cached.data) return cached.data;
+      }
+      throw err;
+    });
+
+  if (!cached) {
+    similarProductsCache.set(cacheKey, {
+      data: null,
+      timestamp: 0,
+      pending
+    });
+  } else {
+    cached.pending = pending;
+  }
+
+  return pending;
+}
+
+/**
  * Invalidate specific product cache entry or entire product cache
  */
 export function invalidateProductCache(slugOrId) {
+  similarProductsCache.clear();
   if (slugOrId) {
     productDetailCache.delete(slugOrId);
+    productMetaCache.delete(slugOrId);
     // Also scan entries for matching product.id or product.slug
     for (const [key, val] of productDetailCache.entries()) {
       if (val.data?.id === slugOrId || val.data?.slug === slugOrId || key === slugOrId) {
@@ -185,6 +273,7 @@ export function invalidateProductCache(slugOrId) {
     }
   } else {
     productDetailCache.clear();
+    productMetaCache.clear();
   }
 }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../utils/api.js';
-import { getCatalogMetadata } from '../utils/metadataCache.js';
+import { getCatalogMetadata, recordProductMeta } from '../utils/metadataCache.js';
 import { useWishlist } from '../context/WishlistContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ShoppingBag, ArrowRight, Heart, Search, SlidersHorizontal, Check, ChevronRight, X, ChevronLeft } from 'lucide-react';
@@ -128,7 +128,11 @@ export default function Home() {
         const productsRes = await api.get(`/products?${queryParams.toString()}`, { signal: controller.signal });
         // Discard response if a newer request was dispatched
         if (isMounted && reqId === activeRequestId.current) {
-          setProducts(productsRes.data || []);
+          const list = productsRes.data || [];
+          setProducts(list);
+          if (Array.isArray(list)) {
+            list.forEach(p => recordProductMeta(p));
+          }
         }
       } catch (err) {
         if (err.name === 'AbortError' || err.code === 20) {
@@ -467,9 +471,10 @@ export default function Home() {
           ) : (
              /* Responsive 2-column mobile grid, 3-column desktop grid */
             <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0 transition-opacity duration-200 ${loading ? 'opacity-75 pointer-events-none' : 'opacity-100'}`}>
-              {products.map((product) => {
+              {products.map((product, index) => {
                 const priceInfo = getProductPrice(product);
                 const wishlistActive = isInWishlist(product.id);
+                const isPriority = index < 4;
 
                 return (
                   <ProductCard
@@ -480,6 +485,7 @@ export default function Home() {
                     thumbnailUrl={product.thumbnailUrl}
                     brandName={product.brand?.name || 'MenX'}
                     categoryName={product.category?.name || ''}
+                    categorySlug={product.category?.slug || ''}
                     subcategoryName={product.subcategory?.name || ''}
                     description={product.description || ''}
                     sellingPrice={priceInfo.sellingPrice}
@@ -487,6 +493,7 @@ export default function Home() {
                     hasDiscount={priceInfo.hasDiscount}
                     wishlistActive={wishlistActive}
                     onWishlistToggle={handleWishlistToggle}
+                    isPriority={isPriority}
                   />
                 );
               })}

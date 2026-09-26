@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../utils/api.js';
 import { useWishlist } from '../context/WishlistContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -22,7 +22,14 @@ import {
 } from 'lucide-react';
 import BaseLayout from '../components/BaseLayout.jsx';
 import { formatCurrency, getProductPrice, getVariantStock, getSafeLabel } from '../utils/formatters.js';
-import { getCachedColors, getCachedProductDetail, getMemoryCachedProduct } from '../utils/metadataCache.js';
+import {
+  getCachedColors,
+  getCachedProductDetail,
+  getMemoryCachedProduct,
+  getRecordedProductMeta,
+  recordProductMeta,
+  getCachedSimilarProducts
+} from '../utils/metadataCache.js';
 
 /**
  * Resolves normalized size name string for a variant or size field.
@@ -160,6 +167,7 @@ export function getVariantColorInfo(v, catalogColors = []) {
 export default function ProductDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
@@ -333,6 +341,21 @@ export default function ProductDetail() {
     const controller = new AbortController();
 
     const memoryProd = getMemoryCachedProduct(slug);
+    const recordedMeta = getRecordedProductMeta(slug);
+
+    // Initial category & ID resolution from location state, recorded metadata, or memory cache
+    const initialCategorySlug = location.state?.categorySlug || 
+      (typeof location.state?.category === 'object' ? location.state?.category?.slug : location.state?.category) ||
+      recordedMeta?.categorySlug ||
+      (typeof memoryProd?.category === 'object' ? memoryProd?.category?.slug : memoryProd?.category) ||
+      null;
+
+    const initialProductId = location.state?.productId ||
+      location.state?.id ||
+      recordedMeta?.id ||
+      memoryProd?.id ||
+      null;
+
     if (memoryProd) {
       setProduct(memoryProd);
       setLoading(false);
@@ -349,6 +372,38 @@ export default function ProductDetail() {
       setLoading(true);
     }
 
+    // Parallel fetch similar products helper
+    let similarInitiated = false;
+
+    async function executeFetchSimilar(categorySlug, currentId, currentSlug) {
+      if (controller.signal.aborted) return;
+      setSimilarLoading(true);
+      try {
+        const list = await getCachedSimilarProducts(categorySlug, { signal: controller.signal });
+        // Exclude current product and take up to 4
+        const filtered = list
+          .filter(p => p.slug !== currentSlug && (!currentId || p.id !== currentId))
+          .slice(0, 4);
+
+        if (isMounted && !controller.signal.aborted) {
+          setSimilarProducts(filtered);
+          similarInitiated = true;
+        }
+      } catch (e) {
+        if (e.name === 'AbortError' || e.code === 20) return;
+        console.warn('Failed to load similar products:', e.message);
+      } finally {
+        if (isMounted && !controller.signal.aborted) {
+          setSimilarLoading(false);
+        }
+      }
+    }
+
+    // Parallel fetch similar products immediately if category is known in advance
+    if (initialCategorySlug) {
+      executeFetchSimilar(initialCategorySlug, initialProductId, slug);
+    }
+
     async function loadProductDetail() {
       setError(null);
       try {
@@ -361,6 +416,8 @@ export default function ProductDetail() {
         if (!isMounted || controller.signal.aborted) return;
 
         setProduct(productData);
+        recordProductMeta(productData);
+
         if (resolvedColors.length > 0) {
           setCatalogColors(resolvedColors);
         }
@@ -382,8 +439,11 @@ export default function ProductDetail() {
           setSelectedSizeKey('');
         }
 
-        // Fetch similar products with abort signal
-        fetchSimilarProducts(productData, controller.signal);
+        // If similar products were not started in advance, or category turned out different:
+        const resolvedCatSlug = productData?.category?.slug || (typeof productData?.category === 'string' ? productData?.category : '');
+        if (productData && (!similarInitiated || (initialCategorySlug && resolvedCatSlug && initialCategorySlug !== resolvedCatSlug))) {
+          executeFetchSimilar(resolvedCatSlug, productData.id, productData.slug);
+        }
       } catch (err) {
         if (err.name === 'AbortError' || err.code === 20) return;
         console.error('Failed to load product detail:', err.message);
@@ -393,33 +453,6 @@ export default function ProductDetail() {
       } finally {
         if (isMounted && !controller.signal.aborted) {
           setLoading(false);
-        }
-      }
-    }
-
-    async function fetchSimilarProducts(currentProd, signal) {
-      if (!currentProd || signal?.aborted) return;
-      setSimilarLoading(true);
-      try {
-        const catSlug = currentProd.category?.slug || (typeof currentProd.category === 'string' ? currentProd.category : '');
-        const queryUrl = catSlug ? `/products?category=${encodeURIComponent(catSlug)}&limit=5` : '/products?limit=5';
-        const res = await api.get(queryUrl, { signal });
-        const list = Array.isArray(res.data) ? res.data : (res.data?.products || []);
-
-        // Exclude current product and take up to 4
-        const filtered = list
-          .filter(p => p.id !== currentProd.id && p.slug !== currentProd.slug)
-          .slice(0, 4);
-
-        if (isMounted && !signal?.aborted) {
-          setSimilarProducts(filtered);
-        }
-      } catch (e) {
-        if (e.name === 'AbortError' || e.code === 20) return;
-        console.warn('Failed to load similar products:', e.message);
-      } finally {
-        if (isMounted && !signal?.aborted) {
-          setSimilarLoading(false);
         }
       }
     }
@@ -1431,6 +1464,11 @@ export default function ProductDetail() {
                   <Link
                     key={item.id}
                     to={`/products/${item.slug}`}
+                    state={{
+                      categorySlug: item.category?.slug || (typeof item.category === 'string' ? item.category : '') || '',
+                      categoryName: item.category?.name || '',
+                      productId: item.id
+                    }}
                     className="group menx-card-interactive rounded-2xl overflow-hidden shadow-sm hover:shadow-xl flex flex-col relative min-w-0"
                   >
                     {/* Thumbnail Image Stage (Zero padding inside image) */}
