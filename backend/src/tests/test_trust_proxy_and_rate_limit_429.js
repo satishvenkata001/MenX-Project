@@ -88,10 +88,43 @@ async function runTestSuite() {
     const remainingB1 = parseInt(resB1.headers['ratelimit-remaining'], 10);
     assert(remainingB1 === remainingA1, `Device B starts with fresh bucket (${remainingB1}), isolated from Device A!`);
 
-    // 3. Test HTTP 429 Too Many Requests enforcement
-    console.log('\n>>> 3. Testing HTTP 429 Too Many Requests response on rate limit exhaustion...');
+    // 3. Test Cloudflare Edge IP Separation via CF-Connecting-IP
+    console.log('\n>>> 3. Testing Cloudflare edge IP separation (CF-Connecting-IP)...');
+    const cfProxyIp = '172.68.44.12';
+    const cfClientA = '203.0.113.88';
+    const cfClientB = '198.51.100.99';
+
+    // Client A request 1
+    const resCfA1 = await makeRequest(server, '/api/v1/categories', 'GET', {
+      'CF-Connecting-IP': cfClientA,
+      'X-Forwarded-For': cfProxyIp
+    });
+    assert(resCfA1.statusCode === 200, `Client A behind Cloudflare returns HTTP 200`);
+    const remCfA1 = parseInt(resCfA1.headers['ratelimit-remaining'], 10);
+    assert(!isNaN(remCfA1), `Client A receives ratelimit-remaining: ${remCfA1}`);
+
+    // Client A request 2 (same IP -> same bucket)
+    const resCfA2 = await makeRequest(server, '/api/v1/categories', 'GET', {
+      'CF-Connecting-IP': cfClientA,
+      'X-Forwarded-For': cfProxyIp
+    });
+    const remCfA2 = parseInt(resCfA2.headers['ratelimit-remaining'], 10);
+    assert(remCfA2 === remCfA1 - 1, `Client A correctly decrements its own bucket (${remCfA1} -> ${remCfA2})`);
+
+    // Client B request 1 (different CF-Connecting-IP, same Cloudflare proxy IP)
+    const resCfB1 = await makeRequest(server, '/api/v1/categories', 'GET', {
+      'CF-Connecting-IP': cfClientB,
+      'X-Forwarded-For': cfProxyIp
+    });
+    assert(resCfB1.statusCode === 200, `Client B behind Cloudflare returns HTTP 200`);
+    const remCfB1 = parseInt(resCfB1.headers['ratelimit-remaining'], 10);
+    assert(remCfB1 === remCfA1, `Client B has independent fresh bucket (${remCfB1}), isolated from Client A!`);
+
+    // 4. Test HTTP 429 Too Many Requests enforcement
+    console.log('\n>>> 4. Testing HTTP 429 Too Many Requests response on rate limit exhaustion...');
     const express = (await import('express')).default;
     const rateLimit = (await import('express-rate-limit')).default;
+    const { keyGenerator } = await import('../middleware/rateLimiter.js');
     const { AppError } = await import('../utils/appError.js');
     const { errorHandler } = await import('../middleware/errorHandler.js');
     
@@ -102,6 +135,7 @@ async function runTestSuite() {
       max: 2,
       standardHeaders: true,
       legacyHeaders: false,
+      keyGenerator,
       handler: (req, res, next) => {
         next(AppError.tooManyRequests('Too many requests from this IP. Please try again after 15 minutes.'));
       }
@@ -127,8 +161,8 @@ async function runTestSuite() {
       rlServer.close();
     }
 
-    // 4. Test Health check STILL works when client IP is 429 blocked
-    console.log('\n>>> 4. Testing Health check availability even when IP is blocked on APIs...');
+    // 5. Test Health check STILL works when client IP is 429 blocked
+    console.log('\n>>> 5. Testing Health check availability even when IP is blocked on APIs...');
     const healthAfterBlock = await makeRequest(server, '/api/v1/health', 'GET', { 'X-Forwarded-For': testIp });
     assert(healthAfterBlock.statusCode === 200, `GET /api/v1/health STILL returns HTTP 200 even when IP is rate-limited on standard APIs`);
     assert(healthAfterBlock.json?.data?.status === 'UP', `Health payload status remains 'UP'`);
