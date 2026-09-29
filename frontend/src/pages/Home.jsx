@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../utils/api.js';
-import { getCatalogMetadata, recordProductMeta } from '../utils/metadataCache.js';
+import {
+  getCatalogMetadata,
+  recordProductMeta,
+  getCachedCatalogProducts,
+  setCachedCatalogProducts,
+  getCatalogCacheKey
+} from '../utils/metadataCache.js';
 import { useWishlist } from '../context/WishlistContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ShoppingBag, ArrowRight, Heart, Search, SlidersHorizontal, Check, ChevronRight, X, ChevronLeft } from 'lucide-react';
@@ -14,14 +20,27 @@ import { getFilterSizes } from '../utils/categorySizes.js';
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
-  
-  const [products, setProducts] = useState([]);
+
+  // Read initial cache synchronously on mount to eliminate skeleton flash on repeat navigation
+  const initialCache = React.useMemo(() => {
+    try {
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const cat = params ? (params.get('category') || '') : '';
+      const initialKey = getCatalogCacheKey({ category: cat, sortBy: 'newest' });
+      return getCachedCatalogProducts(initialKey);
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  const [products, setProducts] = useState(() => initialCache?.data || []);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [sizes, setSizes] = useState([]);
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(initialCache?.data && initialCache.data.length > 0));
+  const [serverConnecting, setServerConnecting] = useState(false);
   const [error, setError] = useState(null);
   
   // Search, Filter & Sort states
@@ -102,34 +121,57 @@ export default function Home() {
     return () => { isMounted = false; };
   }, []);
 
-  // 2. Load filtered products when search/filter/sort options change
+  // 2. Load filtered products when search/filter/sort options change (with SWR caching)
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
     const reqId = ++activeRequestId.current;
 
     async function loadFilteredProducts() {
-      setLoading(true);
-      setError(null);
+      const queryParams = new URLSearchParams();
+      if (debouncedSearch.trim()) queryParams.append('search', debouncedSearch.trim());
+
+      if (selectedCategory) queryParams.append('category', selectedCategory);
+      if (selectedSubcategory) queryParams.append('subcategory', selectedSubcategory);
+      
+      if (selectedBrand) queryParams.append('brand', selectedBrand);
+      if (selectedSize) queryParams.append('size', selectedSize);
+      if (selectedFit) queryParams.append('fit', selectedFit);
+      if (minPrice) queryParams.append('minPrice', minPrice);
+      if (maxPrice) queryParams.append('maxPrice', maxPrice);
+      if (sortBy) queryParams.append('sortBy', sortBy);
+
+      const cacheKey = getCatalogCacheKey(queryParams);
+      const cached = getCachedCatalogProducts(cacheKey);
+
+      // SWR: If cached data exists (fresh or stale), render immediately and keep visible
+      if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+        setProducts(cached.data);
+        setLoading(false);
+        setError(null);
+      } else {
+        // Cold start or empty cache for this specific query combination: show skeleton
+        setLoading(true);
+        setError(null);
+      }
+
+      // Start 2.5s timer for subtle "Connecting to server..." indicator if cache is empty
+      let connectingTimer = null;
+      if (!cached || !cached.data || cached.data.length === 0) {
+        connectingTimer = setTimeout(() => {
+          if (isMounted && reqId === activeRequestId.current) {
+            setServerConnecting(true);
+          }
+        }, 2500);
+      }
+
       try {
-        const queryParams = new URLSearchParams();
-        if (debouncedSearch.trim()) queryParams.append('search', debouncedSearch.trim());
-
-        if (selectedCategory) queryParams.append('category', selectedCategory);
-        if (selectedSubcategory) queryParams.append('subcategory', selectedSubcategory);
-        
-        if (selectedBrand) queryParams.append('brand', selectedBrand);
-        if (selectedSize) queryParams.append('size', selectedSize);
-        if (selectedFit) queryParams.append('fit', selectedFit);
-        if (minPrice) queryParams.append('minPrice', minPrice);
-        if (maxPrice) queryParams.append('maxPrice', maxPrice);
-        if (sortBy) queryParams.append('sortBy', sortBy);
-
         const productsRes = await api.get(`/products?${queryParams.toString()}`, { signal: controller.signal });
         // Discard response if a newer request was dispatched
         if (isMounted && reqId === activeRequestId.current) {
           const list = productsRes.data || [];
           setProducts(list);
+          setCachedCatalogProducts(cacheKey, list);
           if (Array.isArray(list)) {
             list.forEach(p => recordProductMeta(p));
           }
@@ -140,11 +182,18 @@ export default function Home() {
         }
         if (isMounted && reqId === activeRequestId.current) {
           console.error('Failed to load products:', err.message);
-          setError(err.message);
+          // Only show error screen if no cached products are currently visible
+          if (!cached || !cached.data || cached.data.length === 0) {
+            setError(err.message);
+          }
         }
       } finally {
-        if (isMounted && reqId === activeRequestId.current && !controller.signal.aborted) {
-          setLoading(false);
+        if (connectingTimer) clearTimeout(connectingTimer);
+        if (isMounted && reqId === activeRequestId.current) {
+          setServerConnecting(false);
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
         }
       }
     }
@@ -441,22 +490,30 @@ export default function Home() {
 
           {/* Catalog Listing */}
           {loading && products.length === 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-menx-surface border border-menx-border rounded-xl overflow-hidden shadow-md flex flex-col animate-pulse">
-                  <div className="w-full aspect-[4/5] bg-menx-bg/80 flex items-center justify-center relative" />
-                  <div className="p-3 sm:p-5 flex-grow flex flex-col justify-between space-y-3">
-                    <div className="space-y-2">
-                      <div className="h-3.5 bg-menx-surface-elevated rounded w-3/4" />
-                      <div className="h-2.5 bg-menx-surface-elevated rounded w-1/2" />
-                    </div>
-                    <div className="pt-2 border-t border-menx-border flex justify-between items-center">
-                      <div className="h-4 bg-menx-surface-elevated rounded w-16" />
-                      <div className="h-3.5 bg-menx-surface-elevated rounded w-8" />
+            <div className="space-y-4 w-full min-w-0">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-menx-surface border border-menx-border rounded-xl overflow-hidden shadow-md flex flex-col animate-pulse">
+                    <div className="w-full aspect-[4/5] bg-menx-bg/80 flex items-center justify-center relative" />
+                    <div className="p-3 sm:p-5 flex-grow flex flex-col justify-between space-y-3">
+                      <div className="space-y-2">
+                        <div className="h-3.5 bg-menx-surface-elevated rounded w-3/4" />
+                        <div className="h-2.5 bg-menx-surface-elevated rounded w-1/2" />
+                      </div>
+                      <div className="pt-2 border-t border-menx-border flex justify-between items-center">
+                        <div className="h-4 bg-menx-surface-elevated rounded w-16" />
+                        <div className="h-3.5 bg-menx-surface-elevated rounded w-8" />
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+              {serverConnecting && (
+                <div className="flex items-center justify-center space-x-2 text-xs text-menx-text-muted py-2 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-menx-primary" />
+                  <span>Connecting to server...</span>
                 </div>
-              ))}
+              )}
             </div>
           ) : error ? (
             <div className="bg-menx-error/10 border border-menx-error/20 text-menx-error p-6 rounded-xl text-center">

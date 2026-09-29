@@ -1,14 +1,14 @@
 const getApiBaseUrl = () => {
   // 1. Prioritize explicit VITE_API_URL
-  if (import.meta.env.VITE_API_URL) {
+  if (import.meta?.env?.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   // 2. Secondary fallback to VITE_API_BASE_URL if configured
-  if (import.meta.env.VITE_API_BASE_URL) {
+  if (import.meta?.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
   // 3. Development-only fallback to local hostname :5000 or localhost
-  if (import.meta.env.DEV) {
+  if (import.meta?.env?.DEV) {
     if (typeof window !== 'undefined' && window.location && window.location.hostname) {
       return `${window.location.protocol}//${window.location.hostname}:5000/api/v1`;
     }

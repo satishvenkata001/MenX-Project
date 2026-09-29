@@ -2,6 +2,9 @@ import { api } from './api.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes for static taxonomy
 const PRODUCT_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes for product details
+const CATALOG_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes for catalog product queries (SWR)
+const MAX_CATALOG_CACHE_ENTRIES = 40;
+const CATALOG_STORAGE_PREFIX = 'menx_cat_v1_';
 
 const cache = {
   categories: { data: null, timestamp: 0, pending: null },
@@ -15,6 +18,9 @@ const cache = {
 const productDetailCache = new Map();
 const MAX_PRODUCT_CACHE_ENTRIES = 50;
 
+// In-memory bounded cache for customer catalog product lists
+const catalogProductsCache = new Map();
+
 // In-memory cache for customer orders and support requests
 const ordersCache = { data: null, timestamp: 0, pending: null };
 const ORDERS_CACHE_TTL_MS = 60 * 1000; // 1 minute
@@ -22,6 +28,162 @@ const ORDERS_CACHE_TTL_MS = 60 * 1000; // 1 minute
 const supportTicketsCache = new Map();
 const MAX_SUPPORT_CACHE_ENTRIES = 20;
 const SUPPORT_CACHE_TTL_MS = 60 * 1000; // 1 minute
+
+/**
+ * Safe sessionStorage helper methods that never throw or crash if unavailable
+ */
+function safeSessionStorageGet(key) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function safeSessionStorageSet(key, value) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    // Gracefully handle quota exceeded or privacy-disabled storage
+  }
+}
+
+function safeSessionStorageRemove(key) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    window.sessionStorage.removeItem(key);
+  } catch (e) {}
+}
+
+/**
+ * Deterministically serializes catalog query parameters into a stable cache key
+ * Ensures different filter/search/sort combinations never collide or overwrite each other
+ */
+export function getCatalogCacheKey(params = {}) {
+  let entries = [];
+  if (typeof params === 'string') {
+    const clean = params.startsWith('?') ? params.slice(1) : params;
+    const sp = new URLSearchParams(clean);
+    entries = [...sp.entries()];
+  } else if (params instanceof URLSearchParams) {
+    entries = [...params.entries()];
+  } else if (params && typeof params === 'object') {
+    entries = Object.entries(params);
+  }
+
+  const validPairs = entries
+    .filter(([k, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+    .map(([k, v]) => [k.trim().toLowerCase(), String(v).trim()])
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (validPairs.length === 0) {
+    return '__default__';
+  }
+
+  return validPairs.map(([k, v]) => `${k}=${v}`).join('&');
+}
+
+/**
+ * Synchronously retrieves cached catalog products from in-memory cache or sessionStorage
+ * Returns { data, timestamp, isStale } or null
+ */
+export function getCachedCatalogProducts(cacheKey) {
+  const normalizedKey = typeof cacheKey === 'string' ? cacheKey : getCatalogCacheKey(cacheKey);
+  const now = Date.now();
+
+  // 1. Check fast in-memory cache
+  const mem = catalogProductsCache.get(normalizedKey);
+  if (mem && mem.data && Array.isArray(mem.data)) {
+    const isStale = (now - mem.timestamp) >= CATALOG_CACHE_TTL_MS;
+    return {
+      data: mem.data,
+      timestamp: mem.timestamp,
+      isStale
+    };
+  }
+
+  // 2. Check persistent sessionStorage fallback (survives client-side route changes and refreshes)
+  const storageKey = CATALOG_STORAGE_PREFIX + normalizedKey;
+  const stored = safeSessionStorageGet(storageKey);
+  if (stored && stored.data && Array.isArray(stored.data)) {
+    const isStale = (now - stored.timestamp) >= CATALOG_CACHE_TTL_MS;
+    // Rehydrate in-memory cache for fast O(1) subsequent access
+    if (catalogProductsCache.size >= MAX_CATALOG_CACHE_ENTRIES) {
+      const oldest = catalogProductsCache.keys().next().value;
+      if (oldest) catalogProductsCache.delete(oldest);
+    }
+    catalogProductsCache.set(normalizedKey, {
+      data: stored.data,
+      timestamp: stored.timestamp
+    });
+
+    return {
+      data: stored.data,
+      timestamp: stored.timestamp,
+      isStale
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Persists catalog products to in-memory cache and sessionStorage with 3-minute TTL
+ */
+export function setCachedCatalogProducts(cacheKey, products) {
+  if (!Array.isArray(products)) return;
+  const normalizedKey = typeof cacheKey === 'string' ? cacheKey : getCatalogCacheKey(cacheKey);
+  const now = Date.now();
+
+  // Enforce bounded memory size
+  if (catalogProductsCache.size >= MAX_CATALOG_CACHE_ENTRIES) {
+    const oldest = catalogProductsCache.keys().next().value;
+    if (oldest) catalogProductsCache.delete(oldest);
+  }
+
+  catalogProductsCache.set(normalizedKey, {
+    data: products,
+    timestamp: now
+  });
+
+  // Safe sessionStorage persistence (public catalog data only, zero tokens/secrets)
+  const storageKey = CATALOG_STORAGE_PREFIX + normalizedKey;
+  safeSessionStorageSet(storageKey, {
+    data: products,
+    timestamp: now
+  });
+}
+
+/**
+ * Invalidates catalog products cache (specific key or entire catalog cache)
+ */
+export function invalidateCatalogProductsCache(specificKey = null) {
+  if (specificKey) {
+    const normalizedKey = typeof specificKey === 'string' ? specificKey : getCatalogCacheKey(specificKey);
+    catalogProductsCache.delete(normalizedKey);
+    safeSessionStorageRemove(CATALOG_STORAGE_PREFIX + normalizedKey);
+  } else {
+    catalogProductsCache.clear();
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const keysToRemove = [];
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k && k.startsWith(CATALOG_STORAGE_PREFIX)) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => window.sessionStorage.removeItem(k));
+      }
+    } catch (e) {}
+  }
+}
 
 /**
  * Generic helper to get cached metadata item or fetch if stale/missing
@@ -262,6 +424,7 @@ export async function getCachedSimilarProducts(categorySlug, options = {}) {
  */
 export function invalidateProductCache(slugOrId) {
   similarProductsCache.clear();
+  invalidateCatalogProductsCache();
   if (slugOrId) {
     productDetailCache.delete(slugOrId);
     productMetaCache.delete(slugOrId);
@@ -281,6 +444,7 @@ export function invalidateProductCache(slugOrId) {
  * Invalidate metadata cache (e.g. after admin category/brand mutation)
  */
 export function invalidateMetadataCache(key) {
+  invalidateCatalogProductsCache();
   if (key && cache[key]) {
     cache[key].data = null;
     cache[key].timestamp = 0;

@@ -6,7 +6,25 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'https://menx-project.onrender.com',
+        changeOrigin: true,
+        secure: true
+      }
+    }
+  },
+  preview: {
+    port: 4173,
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'https://menx-project.onrender.com',
+        changeOrigin: true,
+        secure: true
+      }
+    }
   },
   build: {
     rollupOptions: {
