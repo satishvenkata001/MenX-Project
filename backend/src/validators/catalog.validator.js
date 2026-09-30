@@ -179,6 +179,30 @@ export const createVariantSchema = z.object({
   path: ['body', 'sellingPrice']
 });
 
+export const bulkCreateVariantItemSchema = z.object({
+  sizeId: uuidSchema,
+  colorId: uuidSchema,
+  sku: z.string().min(1, 'SKU is required').max(100),
+  barcode: z.string().min(1, 'Barcode is required').max(100),
+  mrp: z.number().positive('MRP must be positive'),
+  sellingPrice: z.number().positive('Selling price must be positive'),
+  weightGrams: z.number().int().positive().optional().default(300),
+  lowStockThreshold: z.number().int().min(0).optional().default(5),
+  initialStock: z.number().int({ message: 'Initial stock must be an integer' }).min(0, { message: 'Initial stock cannot be negative' }).optional().default(0)
+}).refine(data => data.sellingPrice <= data.mrp, {
+  message: 'Selling price cannot exceed MRP',
+  path: ['sellingPrice']
+});
+
+export const bulkCreateVariantSchema = z.object({
+  params: z.object({ id: uuidSchema }),
+  body: z.object({
+    variants: z.array(bulkCreateVariantItemSchema)
+      .min(1, 'At least one variant must be provided')
+      .max(50, 'Cannot create more than 50 variants in a single bulk request')
+  })
+});
+
 export const updateVariantSchema = z.object({
   params: z.object({ id: uuidSchema }),
   body: z.object({

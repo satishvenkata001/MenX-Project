@@ -13,6 +13,7 @@ import {
   createProductSchema,
   createSubcategorySchema,
   createVariantSchema,
+  bulkCreateVariantSchema,
   idParamSchema,
   updateBrandSchema,
   updateCategorySchema,
@@ -44,6 +45,7 @@ router.post('/products/:id/archive', validateRequest(idParamSchema), AdminCatalo
 router.delete('/products/:id', validateRequest(idParamSchema), AdminCatalogController.deleteProduct);
 
 // Variants
+router.post('/products/:id/variants/bulk', validateRequest(bulkCreateVariantSchema), AdminCatalogController.createVariantsBulk);
 router.post('/products/:id/variants', validateRequest(createVariantSchema), AdminCatalogController.createVariant);
 router.patch('/variants/:id', validateRequest(updateVariantSchema), AdminCatalogController.updateVariant);
 

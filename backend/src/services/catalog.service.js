@@ -1137,6 +1137,230 @@ export class CatalogService {
   }
 
   /**
+   * Bulk create product variants in an atomic transaction
+   * @param {string} productId - Product ID
+   * @param {Array<Object>} variants - Array of variant objects
+   * @param {string} token - Optional user auth token
+   * @returns {Promise<Array<Object>>} - Created variants with inventory & availability
+   */
+  static async createVariantsBulk(productId, variants, token) {
+    if (!variants || !Array.isArray(variants) || variants.length === 0) {
+      throw AppError.badRequest('At least one variant must be provided');
+    }
+
+    if (!pool) {
+      throw AppError.internal('Database connection pool is not configured for atomic transactions');
+    }
+
+    // 1. Validate intra-batch uniqueness
+    const seenSkus = new Set();
+    const seenBarcodes = new Set();
+    const seenCombinations = new Set();
+
+    for (const v of variants) {
+      const skuNorm = v.sku?.trim().toLowerCase();
+      if (!skuNorm) {
+        throw AppError.badRequest('SKU is required for all variants in bulk creation');
+      }
+      if (seenSkus.has(skuNorm)) {
+        throw AppError.conflict(`Duplicate SKU '${v.sku}' detected in bulk payload.`);
+      }
+      seenSkus.add(skuNorm);
+
+      const barcodeNorm = v.barcode?.trim().toLowerCase();
+      if (!barcodeNorm) {
+        throw AppError.badRequest('Barcode is required for all variants in bulk creation');
+      }
+      if (seenBarcodes.has(barcodeNorm)) {
+        throw AppError.conflict(`Duplicate barcode '${v.barcode}' detected in bulk payload.`);
+      }
+      seenBarcodes.add(barcodeNorm);
+
+      const comboKey = `${v.sizeId}_${v.colorId}`;
+      if (seenCombinations.has(comboKey)) {
+        throw AppError.conflict('Duplicate size and color combination detected in bulk payload.');
+      }
+      seenCombinations.add(comboKey);
+
+      // Validate initialStock non-negative integer
+      if (v.initialStock !== undefined && v.initialStock !== null) {
+        const parsed = Number(v.initialStock);
+        if (!Number.isInteger(parsed) || parsed < 0) {
+          throw AppError.badRequest('Initial stock must be a non-negative integer');
+        }
+      }
+    }
+
+    // 2. Load product, categories, and subcategories
+    const prodRes = await pool.query(
+      `SELECT p.id, p.category_id, p.subcategory_id,
+              c.id AS cat_id, c.name AS cat_name, c.slug AS cat_slug,
+              s.id AS sub_id, s.name AS sub_name, s.slug AS sub_slug
+       FROM products p
+       LEFT JOIN categories c ON p.category_id = c.id
+       LEFT JOIN subcategories s ON p.subcategory_id = s.id
+       WHERE p.id = $1`,
+      [productId]
+    );
+
+    if (prodRes.rows.length === 0) {
+      throw AppError.notFound(`Product with ID '${productId}' not found`);
+    }
+    const product = prodRes.rows[0];
+    const productCategories = product.cat_id ? { id: product.cat_id, name: product.cat_name, slug: product.cat_slug } : null;
+    const productSubcategories = product.sub_id ? { id: product.sub_id, name: product.sub_name, slug: product.sub_slug } : null;
+
+    // 3. Concurrently load all referenced sizes and colors
+    const uniqueSizeIds = [...new Set(variants.map(v => v.sizeId))];
+    const uniqueColorIds = [...new Set(variants.map(v => v.colorId))];
+
+    const [sizesRes, colorsRes] = await Promise.all([
+      pool.query('SELECT id, name, category_type FROM sizes WHERE id = ANY($1::uuid[])', [uniqueSizeIds]),
+      pool.query('SELECT id, name, hex_code FROM colors WHERE id = ANY($1::uuid[])', [uniqueColorIds])
+    ]);
+
+    const sizeMap = new Map(sizesRes.rows.map(s => [s.id, s]));
+    for (const sid of uniqueSizeIds) {
+      if (!sizeMap.has(sid)) {
+        throw AppError.badRequest(`Size with ID '${sid}' not found`);
+      }
+    }
+
+    const colorMap = new Map(colorsRes.rows.map(c => [c.id, c]));
+    for (const cid of uniqueColorIds) {
+      if (!colorMap.has(cid)) {
+        throw AppError.badRequest(`Color with ID '${cid}' not found`);
+      }
+    }
+
+    // 4. Validate category-specific size compatibility for all items
+    for (const v of variants) {
+      const sizeObj = sizeMap.get(v.sizeId);
+      const isValidSize = isSizeValidForCategory(productCategories, sizeObj.name, sizeObj.category_type, productSubcategories);
+      if (!isValidSize) {
+        const categoryTitle = productCategories?.name || productCategories?.slug || 'this';
+        throw AppError.badRequest(`Selected size '${sizeObj.name}' is not valid for product category '${categoryTitle}'.`);
+      }
+    }
+
+    // 5. Check for existing active duplicates in database for this product or SKU/barcode collisions
+    const allSkus = variants.map(v => v.sku.trim());
+    const allBarcodes = variants.map(v => v.barcode.trim());
+
+    const existingCheckRes = await pool.query(
+      `SELECT pv.id, pv.sku, pv.barcode, pv.size_id, pv.color_id, pv.is_active
+       FROM product_variants pv
+       WHERE (pv.product_id = $1 AND pv.is_active = true AND pv.size_id = ANY($2::uuid[]) AND pv.color_id = ANY($3::uuid[]))
+          OR pv.sku = ANY($4::text[])
+          OR pv.barcode = ANY($5::text[])`,
+      [productId, uniqueSizeIds, uniqueColorIds, allSkus, allBarcodes]
+    );
+
+    if (existingCheckRes.rows.length > 0) {
+      for (const row of existingCheckRes.rows) {
+        if (allSkus.some(s => s.toLowerCase() === row.sku?.toLowerCase())) {
+          throw AppError.conflict(`Variant with SKU '${row.sku}' already exists.`);
+        }
+        if (allBarcodes.some(b => b.toLowerCase() === row.barcode?.toLowerCase())) {
+          throw AppError.conflict(`Variant with barcode '${row.barcode}' already exists.`);
+        }
+        if (row.is_active && variants.some(v => v.sizeId === row.size_id && v.colorId === row.color_id)) {
+          const sName = sizeMap.get(row.size_id)?.name || row.size_id;
+          const cName = colorMap.get(row.color_id)?.name || row.color_id;
+          throw AppError.conflict(`An active variant already exists for size '${sName}' and color '${cName}'.`);
+        }
+      }
+      throw AppError.conflict('A conflicting variant already exists.');
+    }
+
+    // 6. Execute atomic insertion inside transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const createdVariants = [];
+      for (const v of variants) {
+        const stockQty = v.initialStock !== undefined && v.initialStock !== null ? parseInt(v.initialStock, 10) : 0;
+        const weightGrams = v.weightGrams ?? 300;
+        const lowStockThreshold = v.lowStockThreshold ?? 5;
+
+        // Insert variant
+        const varRes = await client.query(
+          `INSERT INTO product_variants 
+           (product_id, size_id, color_id, sku, barcode, mrp, selling_price, weight_grams, low_stock_threshold, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+           RETURNING id, product_id, size_id, color_id, sku, barcode, mrp, selling_price, weight_grams, low_stock_threshold, is_active, created_at, updated_at`,
+          [productId, v.sizeId, v.colorId, v.sku.trim(), v.barcode.trim(), v.mrp, v.sellingPrice, weightGrams, lowStockThreshold]
+        );
+        const variantRow = varRes.rows[0];
+
+        // Insert inventory item
+        await client.query(
+          `INSERT INTO inventory_items (variant_id, quantity_available, quantity_reserved, quantity_damaged)
+           VALUES ($1, $2, 0, 0)`,
+          [variantRow.id, stockQty]
+        );
+
+        // Record stock movement if stockQty > 0
+        if (stockQty > 0) {
+          await client.query(
+            `INSERT INTO stock_movements (variant_id, movement_type, quantity, reference_type, reason)
+             VALUES ($1, 'INITIAL_STOCK', $2, 'INITIAL_STOCK', 'Initial stock on variant creation')`,
+            [variantRow.id, stockQty]
+          );
+        }
+
+        const sizeObj = sizeMap.get(variantRow.size_id);
+        const colorObj = colorMap.get(variantRow.color_id);
+        const availableStock = stockQty;
+        const threshold = variantRow.low_stock_threshold ?? 5;
+        let availability = 'OUT_OF_STOCK';
+        if (availableStock > threshold) {
+          availability = 'IN_STOCK';
+        } else if (availableStock > 0) {
+          availability = 'LOW_STOCK';
+        }
+
+        createdVariants.push({
+          id: variantRow.id,
+          productId: variantRow.product_id,
+          sku: variantRow.sku,
+          barcode: variantRow.barcode,
+          mrp: Number(variantRow.mrp),
+          sellingPrice: Number(variantRow.selling_price),
+          weightGrams: variantRow.weight_grams,
+          lowStockThreshold: variantRow.low_stock_threshold,
+          isActive: variantRow.is_active,
+          size: { id: sizeObj.id, name: sizeObj.name, category_type: sizeObj.category_type },
+          color: { id: colorObj.id, name: colorObj.name, hex_code: colorObj.hex_code },
+          availableStock,
+          quantityAvailable: availableStock,
+          quantity_available: availableStock,
+          stock: availableStock,
+          availability
+        });
+      }
+
+      await client.query('COMMIT');
+      return createdVariants;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.code === '23505') {
+        if (err.message?.includes('sku') || err.detail?.includes('sku')) {
+          throw AppError.conflict('A variant with this SKU already exists.');
+        }
+        if (err.message?.includes('barcode') || err.detail?.includes('barcode')) {
+          throw AppError.conflict('A variant with this barcode already exists.');
+        }
+        throw AppError.conflict('An active variant already exists for this size and color.');
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Update a product variant
    */
   static async updateVariant(id, data, token) {

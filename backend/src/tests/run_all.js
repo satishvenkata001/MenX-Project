@@ -28,7 +28,8 @@ const testFiles = [
   'test_three_auth_flows.js',
   'test_trust_proxy_and_rate_limit_429.js',
   'test_production_cloudflare_rate_limit.js',
-  'test_multi_tier_rate_limit.js'
+  'test_multi_tier_rate_limit.js',
+  'test_bulk_variant_creation.js'
 ];
 
 async function runTest(file) {

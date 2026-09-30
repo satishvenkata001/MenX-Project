@@ -35,6 +35,20 @@ export class AdminCatalogController {
   });
 
   /**
+   * POST /api/v1/admin/products/:id/variants/bulk
+   */
+  static createVariantsBulk = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { variants } = req.body;
+    const created = await CatalogService.createVariantsBulk(id, variants, req.token);
+    return sendCreated(
+      res,
+      created,
+      `Successfully created ${created.length} product variant${created.length === 1 ? '' : 's'}`
+    );
+  });
+
+  /**
    * POST /api/v1/admin/products/:id/variants
    */
   static createVariant = asyncHandler(async (req, res) => {

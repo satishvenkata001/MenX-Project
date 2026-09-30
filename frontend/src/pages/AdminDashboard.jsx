@@ -2313,42 +2313,42 @@ export default function AdminDashboard() {
       active: true,
       current: 0,
       total: selectedSizesList.length,
-      message: `Starting creation of ${selectedSizesList.length} variants for ${colorName}...`
+      message: `Creating ${selectedSizesList.length} variants for ${colorName}...`
     });
 
-    const successful = [];
-    const failed = [];
-
-    for (let i = 0; i < selectedSizesList.length; i++) {
-      const sizeObj = selectedSizesList[i];
-      setColorGroupProgress({
-        active: true,
-        current: i + 1,
-        total: selectedSizesList.length,
-        message: `Creating (${i + 1}/${selectedSizesList.length}): ${colorName} — ${sizeObj.name}...`
-      });
-
+    const bulkVariants = selectedSizesList.map(sizeObj => {
       const stockNum = parseInt(colorGroupSizes[sizeObj.id]?.stock, 10) || 0;
       const sku = generateVariantSku(selectedProductForVariants, colorName, sizeObj.name);
       const barcode = generateVariantBarcode();
+      return {
+        sizeId: sizeObj.id,
+        colorId: colorGroupColorId,
+        sku,
+        barcode,
+        mrp,
+        sellingPrice,
+        weightGrams: parseInt(colorGroupWeightGrams, 10) || 300,
+        lowStockThreshold: parseInt(colorGroupLowStockThreshold, 10) || 5,
+        initialStock: stockNum
+      };
+    });
 
-      try {
-        await api.post(`/admin/products/${selectedProductForVariants.id}/variants`, {
-          sizeId: sizeObj.id,
-          colorId: colorGroupColorId,
-          sku,
-          barcode,
-          mrp,
-          sellingPrice,
-          weightGrams: parseInt(colorGroupWeightGrams, 10) || 300,
-          lowStockThreshold: parseInt(colorGroupLowStockThreshold, 10) || 5,
-          initialStock: stockNum
-        });
-        successful.push(sizeObj.name);
-      } catch (err) {
-        const errMsg = err.data?.message || err.message || 'Failed to create variant';
-        failed.push({ size: sizeObj.name, error: errMsg });
-      }
+    try {
+      await api.post(`/admin/products/${selectedProductForVariants.id}/variants/bulk`, {
+        variants: bulkVariants
+      });
+      setColorGroupStatus({
+        type: 'success',
+        text: `✓ Successfully created ${selectedSizesList.length} variant${selectedSizesList.length === 1 ? '' : 's'} for ${colorName} (${selectedSizesList.map(s => s.name).join(', ')}).`
+      });
+      // Clear size selections for next group
+      setColorGroupSizes({});
+    } catch (err) {
+      const errMsg = err.data?.message || err.message || 'Failed to create variants';
+      setColorGroupStatus({
+        type: 'error',
+        text: `Failed to create variants: ${errMsg}`
+      });
     }
 
     // Reload variants list from server
@@ -2361,34 +2361,6 @@ export default function AdminDashboard() {
 
     setCreatingColorGroup(false);
     setColorGroupProgress({ active: false, current: 0, total: 0, message: '' });
-
-    if (failed.length === 0) {
-      setColorGroupStatus({
-        type: 'success',
-        text: `✓ Successfully created ${successful.length} variant${successful.length === 1 ? '' : 's'} for ${colorName} (${successful.join(', ')}).`
-      });
-      // Clear size selections for next group
-      setColorGroupSizes({});
-    } else if (successful.length > 0) {
-      setColorGroupStatus({
-        type: 'partial',
-        text: `Created ${successful.length} variants (${successful.join(', ')}). ${failed.length} failed: ${failed.map(f => `${f.size} (${f.error})`).join('; ')}`
-      });
-      // Keep only failed sizes selected so admin can review and retry
-      const remainingSizes = {};
-      failed.forEach(f => {
-        const sObj = selectedSizesList.find(s => s.name === f.size);
-        if (sObj) {
-          remainingSizes[sObj.id] = colorGroupSizes[sObj.id];
-        }
-      });
-      setColorGroupSizes(remainingSizes);
-    } else {
-      setColorGroupStatus({
-        type: 'error',
-        text: `Failed to create variants: ${failed.map(f => `${f.size}: ${f.error}`).join('; ')}`
-      });
-    }
   };
 
   const handleVariantSubmit = async (e) => {
