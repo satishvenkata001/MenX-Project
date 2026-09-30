@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { InventoryController } from '../controllers/inventory.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
 import { idParamSchema } from '../validators/catalog.validator.js';
@@ -14,14 +15,15 @@ import {
 
 const router = Router();
 
-// Protect all inventory routes with authentication and manager / admin RBAC
+// Protect all inventory routes with authentication, manager / admin RBAC, and admin rate limiter
 router.use(
   requireAuth,
   requireRole(
     USER_ROLES.INVENTORY_MANAGER,
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
-  )
+  ),
+  adminLimiter
 );
 
 // Inventory Queries

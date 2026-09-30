@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AdminCatalogController } from '../controllers/adminCatalog.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
 import {
@@ -25,14 +26,15 @@ import { parseMultipart } from '../middleware/multipart.js';
 
 const router = Router();
 
-// Apply auth & managerial / admin RBAC to all routes in this sub-router
+// Apply auth & managerial / admin RBAC and admin rate limiter to all routes in this sub-router
 router.use(
   requireAuth,
   requireRole(
     USER_ROLES.INVENTORY_MANAGER,
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
-  )
+  ),
+  adminLimiter
 );
 
 // Products

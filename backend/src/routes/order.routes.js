@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { orderLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import {
   validateCheckoutSchema,
@@ -20,7 +21,7 @@ const router = Router();
 
 // All customer endpoints require authentication
 router.post('/checkout/validate', requireAuth, validateRequest(validateCheckoutSchema), validateCheckoutHandler);
-router.post('/orders', requireAuth, validateRequest(createOrderSchema), createOrderHandler);
+router.post('/orders', requireAuth, orderLimiter, validateRequest(createOrderSchema), createOrderHandler);
 router.get('/orders', requireAuth, getOrdersHandler);
 router.get('/orders/:orderId', requireAuth, validateRequest(orderIdParamSchema), getOrderDetailsHandler);
 router.post('/orders/:orderId/cancel', requireAuth, validateRequest(cancelOrderSchema), cancelOrderHandler);

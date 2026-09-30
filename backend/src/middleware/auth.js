@@ -2,6 +2,15 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { pool } from '../config/db.js';
 import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
+import { USER_ROLES } from '../config/constants.js';
+
+const STAFF_ROLES = new Set([
+  USER_ROLES.STORE_STAFF,
+  USER_ROLES.INVENTORY_MANAGER,
+  USER_ROLES.ORDER_MANAGER,
+  USER_ROLES.STORE_MANAGER,
+  USER_ROLES.SUPER_ADMIN
+]);
 
 // Security-conscious in-memory cache configuration bounded by JWT exp
 const TOKEN_CACHE_TTL_MS = 3 * 60 * 1000;   // 3 minutes max for validated JWT session (bounded by exp)
@@ -189,11 +198,62 @@ async function lookupProfile(userId) {
 }
 
 /**
+ * Checks if incoming request has a valid Bearer token belonging to an authorized staff role.
+ * Attaches req.user, req.profile, req.token if valid so downstream requireAuth does not re-fetch.
+ */
+export const isAuthorizedStaffRequest = async (req) => {
+  try {
+    if (req.user && req.profile && STAFF_ROLES.has(req.profile.role)) {
+      return true;
+    }
+
+    const authHeader = req.headers?.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return false;
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token || token.trim() === '') {
+      return false;
+    }
+
+    const user = await authenticateToken(token);
+    if (!user || !user.id) {
+      return false;
+    }
+
+    const profile = await lookupProfile(user.id);
+    if (!profile || profile.is_active === false) {
+      return false;
+    }
+
+    if (STAFF_ROLES.has(profile.role)) {
+      req.user = user;
+      req.profile = profile;
+      req.token = token;
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Authentication Middleware
  * Validates Bearer token cryptographically and attaches current profile/role.
  */
 export const requireAuth = async (req, res, next) => {
   try {
+    // If already authenticated by upstream check (e.g. isAuthorizedStaffRequest)
+    if (req.user && req.profile) {
+      if (req.profile.is_active === false) {
+        return next(AppError.forbidden('User account has been deactivated. Please contact support.'));
+      }
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AdminExportController } from '../controllers/adminExport.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
 import {
@@ -21,6 +22,7 @@ router.get(
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
   ),
+  adminLimiter,
   AdminExportController.getSummary
 );
 
@@ -33,6 +35,7 @@ router.get(
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
   ),
+  adminLimiter,
   validateRequest(exportProductsQuerySchema),
   AdminExportController.exportProducts
 );
@@ -46,6 +49,7 @@ router.get(
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
   ),
+  adminLimiter,
   validateRequest(exportOrdersQuerySchema),
   AdminExportController.exportOrders
 );

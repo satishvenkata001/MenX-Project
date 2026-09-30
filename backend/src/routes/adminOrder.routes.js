@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
 import {
@@ -23,7 +24,8 @@ const adminAuth = [
     USER_ROLES.ORDER_MANAGER,
     USER_ROLES.STORE_MANAGER,
     USER_ROLES.SUPER_ADMIN
-  )
+  ),
+  adminLimiter
 ];
 
 router.get('/admin/orders', adminAuth, getOrdersAdminHandler);

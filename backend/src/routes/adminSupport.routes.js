@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAdminOrStaff } from '../middleware/rbac.js';
+import { adminLimiter } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validate.js';
 import {
   ticketIdParamSchema,
@@ -23,19 +24,18 @@ import {
 
 const router = Router();
 
+// Protect all staff support & suggestions routes with auth, staff RBAC, and admin rate limiter
+router.use(requireAuth, requireAdminOrStaff, adminLimiter);
+
 // Staff Support Management Routes
 router.get(
   ['/support/tickets', '/support'],
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(listTicketsQuerySchema),
   listTicketsAdminHandler
 );
 
 router.get(
   ['/support/tickets/:ticketId', '/support/:ticketId'],
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(ticketIdParamSchema),
   getTicketDetailsAdminHandler
 );
@@ -47,8 +47,6 @@ router.post(
     '/support/:ticketId/reply',
     '/support/:ticketId/messages'
   ],
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(addTicketMessageSchema),
   addAdminMessageHandler
 );
@@ -58,8 +56,6 @@ router.patch(
     '/support/tickets/:ticketId/status',
     '/support/:ticketId/status'
   ],
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(transitionTicketStatusSchema),
   transitionTicketStatusAdminHandler
 );
@@ -67,16 +63,12 @@ router.patch(
 // Staff Suggestions Management Routes
 router.get(
   '/suggestions',
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(listSuggestionsQuerySchema),
   listSuggestionsAdminHandler
 );
 
 router.patch(
   '/suggestions/:suggestionId',
-  requireAuth,
-  requireAdminOrStaff,
   validateRequest(updateSuggestionStatusSchema),
   updateSuggestionAdminHandler
 );

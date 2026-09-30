@@ -27,7 +27,8 @@ const testFiles = [
   'test_customer_email_verification_flow.js',
   'test_three_auth_flows.js',
   'test_trust_proxy_and_rate_limit_429.js',
-  'test_production_cloudflare_rate_limit.js'
+  'test_production_cloudflare_rate_limit.js',
+  'test_multi_tier_rate_limit.js'
 ];
 
 async function runTest(file) {
@@ -36,11 +37,11 @@ async function runTest(file) {
     console.log(`RUNNING TEST FILE: ${file}`);
     console.log(`================================================================`);
     
-    process.env.NODE_ENV = 'test';
+    const nodeEnv = file === 'test_cors_origins.js' ? 'development' : 'test';
     const child = fork(path.join(__dirname, file), [], {
       env: {
         ...process.env,
-        NODE_ENV: 'test'
+        NODE_ENV: nodeEnv
       }
     });
     
