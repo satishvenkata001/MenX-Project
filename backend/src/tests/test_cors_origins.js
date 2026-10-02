@@ -135,11 +135,83 @@ async function runCorsTests() {
       assert(res.headers['access-control-allow-credentials'] === 'true', `${origin} receives Access-Control-Allow-Credentials: true`);
     }
 
-    // 5. Test Unauthorized / Malicious Origins (Safe Rejection without 500)
-    console.log('\n>>> 5. Testing Unauthorized Origin Safe Rejection...');
+    // 5. Test Production Domain Origins (menx.shop and www.menx.shop)
+    console.log('\n>>> 5. Testing Production Custom Domain Origins (https://menx.shop & https://www.menx.shop)...');
+    const productionOrigins = [
+      'https://menx.shop',
+      'https://www.menx.shop',
+      'https://menx-frontend.onrender.com'
+    ];
+
+    const prodEndpoints = [
+      '/api/v1/products',
+      '/api/v1/categories',
+      '/api/v1/sizes',
+      '/api/v1/brands',
+      '/api/v1/colors',
+      '/api/v1/subcategories'
+    ];
+
+    for (const origin of productionOrigins) {
+      // 5a. Test Preflight OPTIONS on /api/v1/products
+      const preflightRes = await makeRequest(server, {
+        path: '/api/v1/products',
+        method: 'OPTIONS',
+        headers: {
+          'Origin': origin,
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'Content-Type, Authorization, X-Guest-Token'
+        }
+      });
+      assert(preflightRes.statusCode === 204, `[Preflight] ${origin} OPTIONS /api/v1/products returns HTTP 204`);
+      assert(preflightRes.headers['access-control-allow-origin'] === origin, `[Preflight] ${origin} matches Access-Control-Allow-Origin exactly`);
+      assert(preflightRes.headers['access-control-allow-origin'] !== '*', `[Preflight] ${origin} does NOT receive wildcard '*'`);
+      assert(preflightRes.headers['access-control-allow-credentials'] === 'true', `[Preflight] ${origin} receives Access-Control-Allow-Credentials: true`);
+      assert(preflightRes.headers['access-control-allow-methods']?.includes('GET'), `[Preflight] ${origin} allows GET method`);
+
+      // 5b. Test GET on /api/v1/products
+      const getRes = await makeRequest(server, {
+        path: '/api/v1/products',
+        method: 'GET',
+        headers: { 'Origin': origin }
+      });
+      assert(getRes.statusCode === 200, `[GET] ${origin} /api/v1/products returns HTTP 200`);
+      assert(getRes.headers['access-control-allow-origin'] === origin, `[GET] ${origin} receives Access-Control-Allow-Origin: ${origin}`);
+      assert(getRes.headers['access-control-allow-credentials'] === 'true', `[GET] ${origin} receives Access-Control-Allow-Credentials: true`);
+
+      // 5c. Test Authenticated/Credentialed Preflight OPTIONS on /api/v1/cart
+      const cartPreflight = await makeRequest(server, {
+        path: '/api/v1/cart',
+        method: 'OPTIONS',
+        headers: {
+          'Origin': origin,
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'Content-Type, Authorization, X-Guest-Token, x-guest-token'
+        }
+      });
+      assert(cartPreflight.statusCode === 204, `[Auth Preflight] ${origin} OPTIONS /api/v1/cart returns HTTP 204`);
+      assert(cartPreflight.headers['access-control-allow-origin'] === origin, `[Auth Preflight] ${origin} cart preflight matches Access-Control-Allow-Origin`);
+      assert(cartPreflight.headers['access-control-allow-credentials'] === 'true', `[Auth Preflight] ${origin} cart preflight allows credentials`);
+    }
+
+    // 5d. Test other catalog endpoints for https://menx.shop
+    console.log('\n>>> 5d. Testing additional catalog endpoints for https://menx.shop...');
+    for (const endpoint of prodEndpoints) {
+      const res = await makeRequest(server, {
+        path: endpoint,
+        method: 'GET',
+        headers: { 'Origin': 'https://menx.shop' }
+      });
+      assert(res.statusCode === 200, `GET ${endpoint} returns HTTP 200`);
+      assert(res.headers['access-control-allow-origin'] === 'https://menx.shop', `GET ${endpoint} allows Origin https://menx.shop`);
+    }
+
+    // 6. Test Unauthorized / Malicious Origins (Safe Rejection without 500)
+    console.log('\n>>> 6. Testing Unauthorized Origin Safe Rejection...');
     const unauthorizedOrigins = [
       'http://malicious-site.com',
       'https://evil-hacker.io',
+      'https://fake-menx.shop',
       'http://172.32.0.1:5173', // Outside 172.16 - 172.31 range
       'http://8.8.8.8:5173',    // Public IPv4
       'http://1.1.1.1:3000'     // Public IPv4
@@ -153,10 +225,20 @@ async function runCorsTests() {
       });
       assert(res.statusCode === 200, `${origin} does not crash server (HTTP ${res.statusCode})`);
       assert(!res.headers['access-control-allow-origin'], `${origin} does NOT receive Access-Control-Allow-Origin header`);
+
+      const optRes = await makeRequest(server, {
+        path: '/api/v1/products',
+        method: 'OPTIONS',
+        headers: {
+          'Origin': origin,
+          'Access-Control-Request-Method': 'GET'
+        }
+      });
+      assert(!optRes.headers['access-control-allow-origin'], `Preflight for ${origin} does NOT receive Access-Control-Allow-Origin header`);
     }
 
-    // 6. Test Non-Origin Requests (curl, server-to-server, native mobile apps)
-    console.log('\n>>> 6. Testing Requests with No Origin (server-to-server, curl)...');
+    // 7. Test Non-Origin Requests (curl, server-to-server, native mobile apps)
+    console.log('\n>>> 7. Testing Requests with No Origin (server-to-server, curl)...');
     const noOriginRes = await makeRequest(server, {
       path: '/api/v1/products',
       method: 'GET'

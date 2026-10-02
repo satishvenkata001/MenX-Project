@@ -53,7 +53,18 @@ const isDevAllowedHost = (hostname) => {
   return false;
 };
 
-const configuredOrigins = (env.FRONTEND_URL ? env.FRONTEND_URL.split(',').map(s => s.trim()) : []).filter(Boolean);
+// Allowed production origins for MENX custom domain and cloud deployment
+const PRODUCTION_ORIGINS = [
+  'https://menx.shop',
+  'https://www.menx.shop',
+  'https://menx-frontend.onrender.com'
+];
+
+// Parse explicitly configured origins from FRONTEND_URL (supports comma-separated origins, strips trailing slashes)
+const envOrigins = (env.FRONTEND_URL ? env.FRONTEND_URL.split(',').map(s => s.trim().replace(/\/+$/, '')) : []).filter(Boolean);
+
+// Combined allowed origins
+const allowedOrigins = Array.from(new Set([...PRODUCTION_ORIGINS, ...envOrigins]));
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -74,8 +85,9 @@ app.use(cors({
       }
     }
 
-    // Check explicitly configured allowed origins (e.g. FRONTEND_URL)
-    if (configuredOrigins.includes(origin)) {
+    // Check explicitly configured and production allowed origins
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
 
