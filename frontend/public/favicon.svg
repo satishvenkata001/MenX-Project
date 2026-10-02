@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0B0F14"/>
+  <rect x="6" y="6" width="500" height="500" rx="106" stroke="#F5A524" stroke-opacity="0.28" stroke-width="10" fill="none"/>
+  <!-- Pure White Left Monogram Wing (MEN) -->
+  <path d="M 88 412 L 88 100 L 176 100 L 246 256 L 246 344 L 172 176 L 172 412 Z" fill="#FFFFFF"/>
+  <!-- MENX Orange Right Monogram Wing (X) -->
+  <path d="M 424 412 L 424 100 L 336 100 L 266 256 L 266 344 L 340 176 L 340 412 Z" fill="#F5A524"/>
+</svg>

@@ -7,7 +7,7 @@ import {
   RotateCcw,
   Truck,
   CreditCard,
-  Phone,
+  Mail,
   MessageSquare,
   Sparkles,
   ChevronDown,
@@ -27,7 +27,7 @@ import BaseLayout from '../components/BaseLayout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../utils/api.js';
 
-const SUPPORT_PHONE = '9381679796';
+const SUPPORT_EMAIL = 'menx001@gmail.com';
 
 const FAQ_DATA = [
   {
@@ -427,7 +427,7 @@ export default function HelpCenter() {
           </div>
         </div>
 
-        {/* Contact Support Hotline Card */}
+        {/* Contact Support Card */}
         <div className="menx-card-elevated border-menx-primary/30 p-6 sm:p-8 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <span className="text-[10px] font-bold uppercase tracking-widest text-menx-primary bg-menx-primary/10 border border-menx-primary/20 px-2.5 py-1 rounded-md">
@@ -444,19 +444,20 @@ export default function HelpCenter() {
           <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0 w-full md:w-auto justify-center">
             <div className="text-center md:text-right">
               <span className="text-[10px] font-bold text-menx-text-muted uppercase block tracking-wider">
-                Direct Hotline
+                SUPPORT EMAIL
               </span>
-              <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-wider select-all">
-                {SUPPORT_PHONE}
+              <span className="text-base sm:text-xl md:text-2xl font-black text-white font-mono tracking-wider select-all break-all">
+                {SUPPORT_EMAIL}
               </span>
             </div>
 
             <a
-              href="tel:9381679796"
-              className="py-3 px-6 bg-menx-primary hover:bg-menx-primary-hover text-[#0B0F14] font-extrabold text-xs sm:text-sm rounded-xl transition-all duration-200 shadow-lg shadow-menx-primary/10 inline-flex items-center justify-center space-x-2 w-full sm:w-auto uppercase tracking-wider"
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="py-3 px-6 bg-menx-primary hover:bg-menx-primary-hover text-[#0B0F14] font-extrabold text-xs sm:text-sm rounded-xl transition-all duration-200 shadow-lg shadow-menx-primary/10 inline-flex items-center justify-center space-x-2 w-full sm:w-auto uppercase tracking-wider shrink-0"
+              aria-label={`Email MENX support at ${SUPPORT_EMAIL}`}
             >
-              <Phone className="w-4 h-4" />
-              <span>CALL SUPPORT</span>
+              <Mail className="w-4 h-4" />
+              <span>EMAIL SUPPORT</span>
             </a>
           </div>
         </div>

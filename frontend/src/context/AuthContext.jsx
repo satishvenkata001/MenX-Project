@@ -90,6 +90,60 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function verifyOtp(email, token) {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/verify-otp', {
+        email: email.trim(),
+        token: token.trim()
+      });
+      const sessionData = res.data;
+      if (sessionData?.session?.accessToken) {
+        api.setToken(sessionData.session.accessToken);
+      }
+
+      const profileRes = await api.get('/auth/me');
+      if (profileRes.data) {
+        setUser({
+          ...profileRes.data.user,
+          ...profileRes.data.profile
+        });
+      }
+
+      // Safe guest-to-authenticated cart merging
+      const guestToken = localStorage.getItem('menx_guest_token');
+      if (guestToken) {
+        try {
+          await api.post('/cart/merge', { guestToken });
+          localStorage.removeItem('menx_guest_token');
+        } catch (mergeErr) {
+          console.error('Failed to merge guest cart on OTP verify:', mergeErr.message);
+        }
+      }
+
+      setLoading(false);
+      return profileRes.data || sessionData;
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      throw err;
+    }
+  }
+
+  async function resendOtp(email) {
+    setError(null);
+    try {
+      const res = await api.post('/auth/resend-otp', {
+        email: email.trim()
+      });
+      return res.data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }
+
   function logout() {
     api.setToken(null);
     setUser(null);
@@ -120,6 +174,8 @@ export function AuthProvider({ children }) {
     error,
     login,
     signup,
+    verifyOtp,
+    resendOtp,
     logout,
     refreshUser,
     isAuthenticated: !!user,

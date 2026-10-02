@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Mail, Lock, User, Phone, LogIn, Send, ArrowLeft, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -6,10 +6,14 @@ import BaseLayout from '../components/BaseLayout.jsx';
 import { api } from '../utils/api.js';
 
 export default function Login() {
-  const { login, signup, refreshUser, isAuthenticated, isAdminOrStaff, error: authError } = useAuth();
+  const { login, signup, verifyOtp, resendOtp, refreshUser, isAuthenticated, isAdminOrStaff, error: authError } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [isAccountCreated, setIsAccountCreated] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpToken, setOtpToken] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+  const otpInputRef = useRef(null);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -47,6 +51,26 @@ export default function Login() {
     }
   }, [isAuthenticated, isAdminOrStaff, navigate, location]);
 
+  // Resend OTP countdown timer
+  useEffect(() => {
+    let timer;
+    if (isVerifyingOtp && resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isVerifyingOtp, resendCooldown]);
+
+  // Auto-focus OTP input when entering verification state
+  useEffect(() => {
+    if (isVerifyingOtp) {
+      setTimeout(() => {
+        otpInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isVerifyingOtp]);
+
   // Handle incoming Supabase Code exchange if present
   useEffect(() => {
     async function handleAuthCallback() {
@@ -76,6 +100,60 @@ export default function Login() {
 
     handleAuthCallback();
   }, [location, navigate, refreshUser]);
+
+  const handleOtpChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setOtpToken(val);
+    if (error) setError('');
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (otpToken.length !== 6) {
+      setError('Please enter the full 6-digit verification code.');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      await verifyOtp(email.trim(), otpToken.trim());
+      const from = location.state?.from?.pathname;
+      if (from) {
+        navigate(from, { replace: true });
+      } else if (isAdminOrStaff) {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (err) {
+      console.error('OTP verification failed:', err.message);
+      setError(err.message || 'Invalid or expired verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || resending) return;
+    setError('');
+    setSuccess('');
+    setResending(true);
+
+    try {
+      const res = await resendOtp(email.trim());
+      setResendCooldown(60);
+      setSuccess(res?.message || 'Verification code resent successfully. Please check your inbox.');
+      otpInputRef.current?.focus();
+    } catch (err) {
+      console.error('Resend OTP failed:', err.message);
+      setError(err.message || 'Failed to resend verification code. Please try again.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -115,9 +193,13 @@ export default function Login() {
           phone.trim() || null
         );
 
-        // Transition to Account Created state
-        setIsAccountCreated(true);
+        // Transition to OTP verification state
+        setIsVerifyingOtp(true);
+        setOtpToken('');
+        setResendCooldown(60);
         setPassword('');
+        setError('');
+        setSuccess('A 6-digit verification code has been sent to your email.');
       } else {
         // Standard Email + Password Sign In Flow
         await login(email.trim(), password);
@@ -151,20 +233,34 @@ export default function Login() {
                 <span>Back to Sign In</span>
               </button>
             </div>
-          ) : isAccountCreated ? (
-            <div className="p-4 border-b border-menx-border">
+          ) : isVerifyingOtp ? (
+            <div className="p-4 border-b border-menx-border flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => {
-                  setIsAccountCreated(false);
-                  setIsRegister(false);
+                  setIsVerifyingOtp(false);
+                  setIsRegister(true);
+                  setOtpToken('');
                   setError('');
                   setSuccess('');
                 }}
                 className="flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Back to Sign In</span>
+                <span>Back to Registration</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVerifyingOtp(false);
+                  setIsRegister(false);
+                  setOtpToken('');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="text-xs font-semibold text-menx-text-muted hover:text-menx-primary transition-colors"
+              >
+                Sign In
               </button>
             </div>
           ) : (
@@ -204,39 +300,99 @@ export default function Login() {
             </div>
           )}
 
-          {/* Account Created Success Screen */}
-          {isAccountCreated ? (
-            <div className="p-8 space-y-6 text-center">
-              <div className="w-16 h-16 bg-menx-success/15 border border-menx-success/30 rounded-2xl flex items-center justify-center mx-auto text-menx-success">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-
-              <div className="space-y-2">
-                <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                  Account Created!
+          {/* OTP Verification Screen */}
+          {isVerifyingOtp ? (
+            <form onSubmit={handleVerifyOtp} className="p-8 space-y-6">
+              {/* Card Header Title */}
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 bg-menx-primary/10 border border-menx-primary/20 rounded-2xl flex items-center justify-center mx-auto text-menx-primary mb-3">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <h2 className="text-2xl font-extrabold tracking-tight text-white">
+                  Verify Your Email
                 </h2>
                 <p className="text-xs text-menx-text-secondary leading-relaxed">
-                  Your MENX account for <span className="text-white font-semibold">{email}</span> has been created successfully.
-                </p>
-                <p className="text-xs text-menx-text-muted leading-relaxed">
-                  You can now sign in using your email address and password to start shopping.
+                  Enter the 6-digit code sent to{' '}
+                  <span className="text-white font-bold break-all">{email}</span>
                 </p>
               </div>
 
+              {/* Error alerts */}
+              {(error || authError) && (
+                <div className="p-3 bg-menx-error/10 border border-menx-error/20 text-menx-error text-xs rounded-lg font-medium flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{getErrorMessage(error || authError)}</span>
+                </div>
+              )}
+
+              {/* Success alerts */}
+              {success && (
+                <div className="p-3 bg-menx-success/10 border border-menx-success/20 text-menx-success text-xs rounded-lg text-center font-medium flex items-center justify-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* 6-Digit Numeric OTP Input */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-menx-text-secondary flex justify-between items-center">
+                    <span>Verification Code</span>
+                    <span className="text-[10px] text-menx-text-muted uppercase tracking-wider font-mono">
+                      {otpToken.length}/6 digits
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      ref={otpInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      required
+                      value={otpToken}
+                      onChange={handleOtpChange}
+                      placeholder="••••••"
+                      className="w-full bg-menx-bg border border-menx-border rounded-xl py-3 px-4 text-center font-mono text-2xl tracking-[0.4em] font-extrabold text-white placeholder-gray-600 focus:outline-none focus:border-menx-primary focus:ring-1 focus:ring-menx-primary transition-all select-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Resend Code Section */}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-menx-text-muted">Didn't receive code?</span>
+                  <button
+                    type="button"
+                    disabled={resendCooldown > 0 || resending}
+                    onClick={handleResendCode}
+                    className="font-bold text-menx-primary hover:text-menx-primary-hover disabled:text-menx-text-muted disabled:cursor-not-allowed transition-colors"
+                  >
+                    {resending
+                      ? 'Sending...'
+                      : resendCooldown > 0
+                      ? `Resend Code in ${resendCooldown}s`
+                      : 'Resend Code'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Verify & Sign In Button */}
               <button
-                type="button"
-                onClick={() => {
-                  setIsAccountCreated(false);
-                  setIsRegister(false);
-                  setError('');
-                  setSuccess('');
-                }}
-                className="w-full py-3 bg-menx-primary hover:bg-menx-primary-hover text-[#0B0F14] font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-lg"
+                type="submit"
+                disabled={loading || otpToken.length !== 6}
+                className="w-full py-3 bg-menx-primary hover:bg-menx-primary-hover disabled:bg-menx-surface-elevated disabled:text-menx-text-muted text-[#0B0F14] font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-lg cursor-pointer disabled:cursor-not-allowed"
               >
-                <LogIn className="w-4 h-4" />
-                <span>Sign In to Your Account</span>
+                {loading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-black" />
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Verify &amp; Sign In</span>
+                  </>
+                )}
               </button>
-            </div>
+            </form>
           ) : (
             <form onSubmit={handleSubmit} className="p-8 space-y-6">
               {/* Card Header Title */}

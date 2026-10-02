@@ -14,7 +14,6 @@ import {
   Headphones,
   User,
   Shield,
-  Phone,
   Package,
   ArrowLeft,
   X
@@ -25,7 +24,7 @@ import { api } from '../utils/api.js';
 import { formatDate } from '../utils/formatters.js';
 import { getCachedSupportTickets, getMemoryCachedSupportTickets, invalidateSupportCache } from '../utils/metadataCache.js';
 
-const SUPPORT_PHONE = '9381679796';
+const SUPPORT_EMAIL = 'menx001@gmail.com';
 
 export default function MySupport() {
   const [page, setPage] = useState(1);

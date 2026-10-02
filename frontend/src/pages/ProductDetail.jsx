@@ -408,7 +408,7 @@ export default function ProductDetail() {
       setError(null);
       try {
         const [productData, colorsData] = await Promise.all([
-          getCachedProductDetail(slug, false, { signal: controller.signal }),
+          getCachedProductDetail(slug, false),
           getCachedColors().catch(() => [])
         ]);
 

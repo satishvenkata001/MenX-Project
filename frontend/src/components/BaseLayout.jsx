@@ -7,7 +7,7 @@ import { useCart } from '../context/CartContext.jsx';
 import {
   Menu, X, User, ShoppingBag, Heart, LogOut, LayoutDashboard,
   Shield, Package, RotateCcw, ShoppingCart, HelpCircle,
-  MessageSquare, ChevronRight, ArrowRight, Phone
+  MessageSquare, ChevronRight, ArrowRight, Mail
 } from 'lucide-react';
 
 export default function BaseLayout({ children }) {
@@ -697,7 +697,7 @@ export default function BaseLayout({ children }) {
               <div className="bg-menx-surface-elevated/50 border border-menx-border/80 hover:border-menx-primary/40 rounded-2xl p-4 space-y-2.5 transition-all shadow-sm">
                 <div className="flex items-center space-x-2.5">
                   <div className="w-8 h-8 rounded-xl bg-menx-primary/10 border border-menx-primary/20 flex items-center justify-center text-menx-primary shrink-0">
-                    <Phone className="w-4 h-4" />
+                    <Mail className="w-4 h-4" />
                   </div>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-wider text-white">Need Help?</h4>
@@ -706,11 +706,11 @@ export default function BaseLayout({ children }) {
                 </div>
                 <div>
                   <a
-                    href="tel:9381679796"
-                    className="inline-flex items-center text-sm sm:text-base font-mono font-extrabold text-menx-primary hover:text-menx-primary-hover hover:underline tracking-wider transition-colors pt-0.5"
-                    aria-label="Call MENX support at 9381679796"
+                    href="mailto:menx001@gmail.com"
+                    className="inline-flex items-center text-sm sm:text-base font-mono font-extrabold text-menx-primary hover:text-menx-primary-hover hover:underline tracking-normal transition-colors pt-0.5 break-all"
+                    aria-label="Email MENX support at menx001@gmail.com"
                   >
-                    9381679796
+                    menx001@gmail.com
                   </a>
                 </div>
               </div>

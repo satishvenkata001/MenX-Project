@@ -160,6 +160,7 @@ const PromotionalDetails = {
 function CategorySlider({ categories, onSelectCategory }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const isTransitioningRef = useRef(false);
   const touchStartRef = useRef(null);
   const touchEndRef = useRef(null);
 
@@ -168,28 +169,40 @@ function CategorySlider({ categories, onSelectCategory }) {
     (cat) => cat && cat.slug && PromotionalDetails[cat.slug]
   );
 
-  // Autoplay handler
-  useEffect(() => {
-    if (activePromoCategories.length <= 1 || isHovered) return;
+  const goToSlide = (nextIndex, isAuto = false) => {
+    if (!isAuto && isTransitioningRef.current) return;
+    if (nextIndex === activeIndex) return;
 
-    const interval = setInterval(() => {
-      setActiveIndex((prevIndex) => (prevIndex + 1) % activePromoCategories.length);
-    }, 5000);
+    isTransitioningRef.current = true;
+    setActiveIndex(nextIndex);
 
-    return () => clearInterval(interval);
-  }, [activePromoCategories, isHovered]);
-
-  if (activePromoCategories.length === 0) return null;
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 320);
+  };
 
   const handlePrev = () => {
-    setActiveIndex((prevIndex) => 
-      prevIndex === 0 ? activePromoCategories.length - 1 : prevIndex - 1
-    );
+    const nextIndex = activeIndex === 0 ? activePromoCategories.length - 1 : activeIndex - 1;
+    goToSlide(nextIndex);
   };
 
   const handleNext = () => {
-    setActiveIndex((prevIndex) => (prevIndex + 1) % activePromoCategories.length);
+    const nextIndex = (activeIndex + 1) % activePromoCategories.length;
+    goToSlide(nextIndex);
   };
+
+  // Autoplay handler: resets on activeIndex change, paused on hover
+  useEffect(() => {
+    if (activePromoCategories.length <= 1 || isHovered) return;
+
+    const timer = setTimeout(() => {
+      goToSlide((activeIndex + 1) % activePromoCategories.length, true);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [activeIndex, activePromoCategories.length, isHovered]);
+
+  if (activePromoCategories.length === 0) return null;
 
   // Keyboard navigation
   const handleKeyDown = (e) => {
@@ -220,6 +233,8 @@ function CategorySlider({ categories, onSelectCategory }) {
     } else if (distance < -minSwipeDistance) {
       handlePrev();
     }
+    touchStartRef.current = null;
+    touchEndRef.current = null;
   };
 
   return (
@@ -233,7 +248,7 @@ function CategorySlider({ categories, onSelectCategory }) {
     >
       <GlobalGradients />
       <div 
-        className="relative w-full h-[190px] sm:h-[250px] md:h-[290px] lg:h-[330px] bg-gradient-to-r from-[#121821] via-[#151D28] to-[#121821] border border-menx-border rounded-2xl overflow-hidden shadow-2xl flex items-center select-none"
+        className="relative w-full h-[210px] sm:h-[250px] md:h-[290px] lg:h-[330px] bg-gradient-to-r from-[#121821] via-[#151D28] to-[#121821] border border-menx-border rounded-2xl overflow-hidden shadow-2xl flex items-center select-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -250,10 +265,10 @@ function CategorySlider({ categories, onSelectCategory }) {
             <div
               key={cat.id}
               onClick={() => onSelectCategory(cat.slug)}
-              className={`absolute inset-0 w-full h-full flex items-center justify-between p-5 sm:p-8 md:p-12 gap-4 transition-all duration-700 ease-in-out cursor-pointer ${
+              className={`absolute inset-0 w-full h-full flex items-center justify-between px-11 sm:px-16 md:px-20 py-4 sm:py-8 md:py-12 gap-3 sm:gap-4 transition-all duration-300 ease-in-out cursor-pointer ${
                 isActive 
-                  ? 'opacity-100 z-10 translate-x-0 scale-100' 
-                  : 'opacity-0 z-0 pointer-events-none translate-x-8 scale-95'
+                  ? 'opacity-100 z-10 translate-x-0 scale-100 visible' 
+                  : 'opacity-0 z-0 pointer-events-none translate-x-4 scale-98 invisible'
               }`}
             >
               {/* Left Content Column */}
@@ -320,28 +335,30 @@ function CategorySlider({ categories, onSelectCategory }) {
           );
         })}
 
-        {/* Previous Button (Desktop) */}
+        {/* Previous Button */}
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             handlePrev();
           }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full border border-menx-border bg-menx-surface-elevated/90 hover:bg-menx-surface text-menx-text hover:text-menx-primary rounded-full shadow-lg transition-all hidden md:flex items-center justify-center z-20 cursor-pointer backdrop-blur-sm"
+          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-menx-border bg-menx-surface-elevated/90 hover:bg-menx-surface text-menx-text hover:text-menx-primary shadow-lg transition-all flex items-center justify-center z-20 cursor-pointer backdrop-blur-sm active:scale-95"
           aria-label="Previous slide"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        {/* Next Button (Desktop) */}
+        {/* Next Button */}
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             handleNext();
           }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full border border-menx-border bg-menx-surface-elevated/90 hover:bg-menx-surface text-menx-text hover:text-menx-primary rounded-full shadow-lg transition-all hidden md:flex items-center justify-center z-20 cursor-pointer backdrop-blur-sm"
+          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-menx-border bg-menx-surface-elevated/90 hover:bg-menx-surface text-menx-text hover:text-menx-primary shadow-lg transition-all flex items-center justify-center z-20 cursor-pointer backdrop-blur-sm active:scale-95"
           aria-label="Next slide"
         >
-          <ChevronRight className="w-5 h-5" />
+          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       </div>
 
@@ -353,7 +370,7 @@ function CategorySlider({ categories, onSelectCategory }) {
             return (
               <button
                 key={idx}
-                onClick={() => setActiveIndex(idx)}
+                onClick={() => goToSlide(idx)}
                 className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                   isActive ? 'w-5 bg-menx-primary' : 'w-1.5 bg-menx-border hover:bg-menx-text-muted'
                 }`}

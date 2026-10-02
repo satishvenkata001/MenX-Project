@@ -314,9 +314,15 @@ export async function getCachedProductDetail(slug, forceRefresh = false, options
       return product;
     })
     .catch(err => {
-      if (cached) {
-        cached.pending = null;
-        if (cached.data) return cached.data;
+      const currentEntry = productDetailCache.get(slug);
+      if (currentEntry) {
+        if (currentEntry.pending === pendingPromise) {
+          currentEntry.pending = null;
+        }
+        if (currentEntry.data) {
+          return currentEntry.data;
+        }
+        productDetailCache.delete(slug);
       }
       throw err;
     });
