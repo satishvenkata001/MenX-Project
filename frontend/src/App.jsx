@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { WishlistProvider } from './context/WishlistContext.jsx';
 import { CartProvider } from './context/CartContext.jsx';
@@ -41,10 +41,47 @@ function PageFallback() {
   );
 }
 
+// Lightweight redirect handler to safely intercept expired/invalid password recovery links that Supabase redirects to Site URL ("/")
+function AuthRedirectHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  React.useEffect(() => {
+    // Only intercept when landing on root ("/")
+    if (location.pathname === '/') {
+      const rawHash = location.hash.startsWith('#') ? location.hash.substring(1) : location.hash;
+      const hashParams = new URLSearchParams(rawHash);
+      const searchParams = new URLSearchParams(location.search);
+
+      const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
+      const errorDesc = (hashParams.get('error_description') || searchParams.get('error_description') || '').toLowerCase();
+      const error = hashParams.get('error') || searchParams.get('error');
+
+      // Specifically detect password recovery failures or valid recovery tokens arriving at root
+      const isRecoveryFailure =
+        errorCode === 'otp_expired' ||
+        errorDesc.includes('email link is invalid or has expired') ||
+        errorDesc.includes('email link') ||
+        rawHash.includes('error_code=otp_expired') ||
+        rawHash.includes('otp_expired');
+
+      const isRecoverySuccess =
+        hashParams.get('type') === 'recovery' && hashParams.get('access_token');
+
+      if (isRecoveryFailure || isRecoverySuccess) {
+        navigate('/reset-password' + location.search + location.hash, { replace: true });
+      }
+    }
+  }, [location, navigate]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <AuthRedirectHandler />
         <AuthProvider>
           <WishlistProvider>
             <CartProvider>

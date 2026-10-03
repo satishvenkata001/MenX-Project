@@ -30,10 +30,27 @@ export default function ResetPassword() {
       try {
         setError('');
         
-        // 1. Check for Hash Fragment parameters (Implicit Recovery flow)
+        // 1. Check for Hash Fragment parameters (Implicit Recovery flow or error response)
         const hash = location.hash;
         if (hash) {
-          const params = new URLSearchParams(hash.substring(1));
+          const rawHash = hash.startsWith('#') ? hash.substring(1) : hash;
+          const params = new URLSearchParams(rawHash);
+          const errorCode = params.get('error_code');
+          const errorDesc = (params.get('error_description') || '').toLowerCase();
+          const errorParam = params.get('error');
+
+          // Explicitly detect expired/invalid recovery link signatures
+          if (
+            errorCode === 'otp_expired' ||
+            errorParam === 'access_denied' ||
+            errorDesc.includes('email link is invalid or has expired') ||
+            errorDesc.includes('email link') ||
+            rawHash.includes('error_code=otp_expired') ||
+            rawHash.includes('otp_expired')
+          ) {
+            throw new Error('Your password reset link is invalid or has expired. Please request a new reset link.');
+          }
+
           const accessToken = params.get('access_token');
           const type = params.get('type');
           
@@ -44,10 +61,22 @@ export default function ResetPassword() {
           }
         }
 
-        // 2. Check for Code Query parameter (PKCE flow)
+        // 2. Check for Code Query parameter (PKCE flow or query-based error)
         const searchParams = new URLSearchParams(location.search);
+        const searchErrorCode = searchParams.get('error_code');
+        const searchErrorDesc = (searchParams.get('error_description') || '').toLowerCase();
+        const searchError = searchParams.get('error');
+
+        if (
+          searchErrorCode === 'otp_expired' ||
+          searchError === 'access_denied' ||
+          searchErrorDesc.includes('email link is invalid or has expired') ||
+          searchErrorDesc.includes('email link')
+        ) {
+          throw new Error('Your password reset link is invalid or has expired. Please request a new reset link.');
+        }
+
         const code = searchParams.get('code');
-        
         if (code) {
           // Exchange the PKCE code via our backend
           const res = await api.post('/auth/exchange-code', { code });
@@ -59,10 +88,10 @@ export default function ResetPassword() {
         }
 
         // If no code and no access token, or type is not recovery
-        throw new Error('This password reset link is invalid or has expired.');
+        throw new Error('Your password reset link is invalid or has expired. Please request a new reset link.');
       } catch (err) {
         console.error('Session resolution failed:', err.message);
-        setError(err.message || 'Failed to verify password reset link.');
+        setError(err.message || 'Your password reset link is invalid or has expired. Please request a new reset link.');
         setLoading(false);
       }
     }
@@ -121,10 +150,12 @@ export default function ResetPassword() {
               <KeyRound className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-extrabold tracking-tight text-white text-center">
-              Create New Password
+              {error && !token ? 'Reset Password' : 'Create New Password'}
             </h2>
             <p className="text-xs text-menx-text-secondary text-center">
-              Please enter and confirm your new secure password.
+              {error && !token
+                ? 'Password reset link status'
+                : 'Please enter and confirm your new secure password.'}
             </p>
           </div>
 
@@ -202,12 +233,23 @@ export default function ResetPassword() {
                 </form>
               )}
 
-              {/* Back to Login options if link error or successful reset */}
+              {/* Back to Login / Request Reset options if link error or successful reset */}
               {(error || success || !token) && (
-                <div className="pt-2 text-center">
+                <div className="pt-2 space-y-3 text-center">
+                  {error && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/login?action=forgot-password', { state: { forgot: true } })}
+                      className="w-full py-2.5 bg-menx-primary hover:bg-menx-primary-hover text-[#0B0F14] text-xs font-extrabold rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-md cursor-pointer"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      <span>Request New Reset Link</span>
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => navigate('/login')}
-                    className="inline-flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
+                    className="inline-flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Back to Sign In</span>

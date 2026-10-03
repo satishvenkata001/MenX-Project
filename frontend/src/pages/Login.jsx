@@ -51,6 +51,22 @@ export default function Login() {
     }
   }, [isAuthenticated, isAdminOrStaff, navigate, location]);
 
+  // Handle forgot password request via route state or query param
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (location.state?.forgot || searchParams.get('action') === 'forgot-password' || searchParams.get('forgot') === 'true') {
+      setIsForgotPassword(true);
+      setIsRegister(false);
+      setIsVerifyingOtp(false);
+      if (searchParams.get('action') === 'forgot-password' || searchParams.get('forgot') === 'true') {
+        searchParams.delete('action');
+        searchParams.delete('forgot');
+        const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : '';
+        window.history.replaceState({}, document.title, location.pathname + newSearch);
+      }
+    }
+  }, [location]);
+
   // Resend OTP countdown timer
   useEffect(() => {
     let timer;
@@ -226,6 +242,7 @@ export default function Login() {
                   setIsForgotPassword(false);
                   setError('');
                   setSuccess('');
+                  navigate('/login', { replace: true, state: {} });
                 }}
                 className="flex items-center space-x-2 text-xs font-semibold text-menx-text-secondary hover:text-white transition-colors"
               >
