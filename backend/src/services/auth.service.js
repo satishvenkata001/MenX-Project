@@ -161,8 +161,31 @@ export class AuthService {
    */
   static async requestPasswordReset(email) {
     const authClient = createAuthClient();
+
+    // Determine production-safe password reset redirect URL
+    const resetRedirectUrl = (() => {
+      if (process.env.SITE_URL && process.env.SITE_URL.trim()) {
+        return `${process.env.SITE_URL.trim().replace(/\/+$/, '')}/reset-password`;
+      }
+      if (env.NODE_ENV === 'production') {
+        const primaryOrigin = (env.FRONTEND_URL || '')
+          .split(',')[0]
+          .trim()
+          .replace(/\/+$/, '');
+        if (primaryOrigin && primaryOrigin.startsWith('https://')) {
+          return `${primaryOrigin}/reset-password`;
+        }
+        return 'https://menx.shop/reset-password';
+      }
+      const baseDevUrl = (env.FRONTEND_URL || 'http://localhost:5173')
+        .split(',')[0]
+        .trim()
+        .replace(/\/+$/, '');
+      return `${baseDevUrl}/reset-password`;
+    })();
+
     const { error } = await authClient.auth.resetPasswordForEmail(email, {
-      redirectTo: `${env.FRONTEND_URL}/reset-password`
+      redirectTo: resetRedirectUrl
     });
 
     if (error) {
