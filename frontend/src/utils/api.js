@@ -80,10 +80,14 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        // Handle 401 Unauthorized globally
+        // Handle 401 Unauthorized globally (exclude /login and /reset-password)
         if (response.status === 401) {
           this.setToken(null);
-          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          if (
+            typeof window !== 'undefined' &&
+            !window.location.pathname.includes('/login') &&
+            !window.location.pathname.includes('/reset-password')
+          ) {
             window.location.href = '/login?expired=true';
           }
         }
@@ -154,7 +158,11 @@ class ApiClient {
       if (!response.ok) {
         if (response.status === 401) {
           this.setToken(null);
-          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          if (
+            typeof window !== 'undefined' &&
+            !window.location.pathname.includes('/login') &&
+            !window.location.pathname.includes('/reset-password')
+          ) {
             window.location.href = '/login?expired=true';
           }
         }

@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
 import { USER_ROLES } from '../config/constants.js';
+import { ensureUserProfile, fetchProfileById } from '../utils/profileHelper.js';
 
 const STAFF_ROLES = new Set([
   USER_ROLES.STORE_STAFF,
@@ -144,9 +145,10 @@ async function authenticateToken(token) {
 }
 
 /**
- * Looks up user profile and role from PostgreSQL with short-lived caching and immediate invalidation
+ * Looks up user profile and role from PostgreSQL with short-lived caching,
+ * auto-healing missing customer profiles for authenticated Supabase users.
  */
-async function lookupProfile(userId) {
+async function lookupProfile(userId, authUser = null) {
   const now = Date.now();
 
   // 1. Check profile cache
@@ -155,31 +157,12 @@ async function lookupProfile(userId) {
     return cached.profile;
   }
 
-  let profile = null;
+  // 2. Fetch directly from database
+  let profile = await fetchProfileById(userId);
 
-  // 2. Fetch directly from PostgreSQL pool for low latency (~5-15ms)
-  if (pool) {
-    try {
-      const res = await pool.query('SELECT * FROM profiles WHERE id = $1', [userId]);
-      if (res.rows.length > 0) {
-        profile = res.rows[0];
-      }
-    } catch (err) {
-      logger.error('Error fetching profile from PostgreSQL pool', { error: err.message, userId });
-    }
-  }
-
-  // Fallback to Supabase PostgREST if pool query failed or not initialized
-  if (!profile) {
-    const { data, error } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (!error && data) {
-      profile = data;
-    }
+  // 3. If profile is missing but user is authenticated, auto-heal
+  if (!profile && authUser) {
+    profile = await ensureUserProfile(authUser);
   }
 
   if (!profile) {
@@ -187,7 +170,7 @@ async function lookupProfile(userId) {
     return null;
   }
 
-  // 3. Store in profile cache with 15s TTL
+  // 4. Store in profile cache with TTL
   enforceCacheLimit(profileCache, MAX_CACHE_SIZE);
   profileCache.set(userId, {
     profile,
@@ -222,7 +205,7 @@ export const isAuthorizedStaffRequest = async (req) => {
       return false;
     }
 
-    const profile = await lookupProfile(user.id);
+    const profile = await lookupProfile(user.id, user);
     if (!profile || profile.is_active === false) {
       return false;
     }
@@ -273,8 +256,8 @@ export const requireAuth = async (req, res, next) => {
       return next(AppError.unauthorized('Invalid or expired authentication token'));
     }
 
-    // 2. Look up profile and role
-    const profile = await lookupProfile(user.id);
+    // 2. Look up profile and role (auto-healing customer profile if missing)
+    const profile = await lookupProfile(user.id, user);
     if (!profile) {
       logger.warn(`Profile record not found for authenticated user ID: ${user.id}`);
       return next(AppError.unauthorized('User profile not found. Please re-authenticate.'));
@@ -325,7 +308,7 @@ export const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    const profile = await lookupProfile(user.id);
+    const profile = await lookupProfile(user.id, user);
     req.user = user;
     req.profile = profile || null;
     req.token = token;

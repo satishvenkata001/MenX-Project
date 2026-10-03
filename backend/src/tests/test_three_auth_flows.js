@@ -147,10 +147,10 @@ async function runTests() {
     assert(logoutRes.status === 200, '2.4 POST /auth/logout succeeds with HTTP 200');
 
     // =========================================================================
-    // FLOW 3: FORGOT PASSWORD & PASSWORD RESET
+    // FLOW 3: FORGOT PASSWORD & REAL RECOVERY TOKEN PASSWORD RESET
     // =========================================================================
     console.log('\n================================================================');
-    console.log('FLOW 3: FORGOT PASSWORD & PASSWORD RESET');
+    console.log('FLOW 3: FORGOT PASSWORD & REAL RECOVERY TOKEN PASSWORD RESET');
     console.log('================================================================');
 
     // 3.1 Request password reset (does not leak email existence)
@@ -167,24 +167,63 @@ async function runTests() {
       '3.1 Generic response returned without revealing account existence'
     );
 
-    // 3.2 Update password via authenticated session (/auth/password-update)
+    // 3.2 Generate & follow real Supabase recovery link
+    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: testCustomerEmail,
+      options: {
+        redirectTo: 'http://localhost:5173/reset-password'
+      }
+    });
+    assert(!linkErr && linkData?.properties?.action_link, '3.2 Real Supabase recovery link generated');
+
+    const verifyRecoveryRes = await fetch(linkData.properties.action_link, {
+      method: 'GET',
+      redirect: 'manual'
+    });
+    assert(verifyRecoveryRes.status === 303, '3.2 Recovery verify returns HTTP 303 redirect');
+
+    const locationHeader = verifyRecoveryRes.headers.get('location') || '';
+    assert(locationHeader.includes('access_token=') && locationHeader.includes('type=recovery'), '3.2 Recovery token returned in hash fragment');
+
+    const hashParams = new URLSearchParams(locationHeader.split('#')[1]);
+    const recoveryAccessToken = hashParams.get('access_token');
+    assert(!!recoveryAccessToken, '3.2 Recovery access token extracted successfully');
+
+    // 3.3 Update password via REAL recovery token session (/auth/password-update)
     const updatePassRes = await fetch(`${baseUrl}/auth/password-update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${passwordToken}`
+        Authorization: `Bearer ${recoveryAccessToken}`
       },
       body: JSON.stringify({ newPassword })
     });
-    assert(updatePassRes.status === 200, '3.2 POST /auth/password-update succeeds with HTTP 200');
+    assert(updatePassRes.status === 200, '3.3 POST /auth/password-update succeeds with HTTP 200 using RECOVERY token');
 
-    // 3.3 Verify login works with new password
+    // 3.4 Verify old password no longer works
+    const oldPassLoginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: testCustomerEmail, password: testPassword })
+    });
+    assert(oldPassLoginRes.status === 401, '3.4 Old password rejected with HTTP 401');
+
+    // 3.5 Verify fresh login works with new password
     const newPassLoginRes = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: testCustomerEmail, password: newPassword })
     });
-    assert(newPassLoginRes.status === 200, '3.3 Login succeeds with newly updated password');
+    const newPassLoginData = await newPassLoginRes.json();
+    assert(newPassLoginRes.status === 200, '3.5 Login succeeds with newly updated password');
+    assert(!!newPassLoginData.data?.session?.accessToken, '3.5 Fresh session access token returned');
+
+    // 3.6 Verify session for new password via /auth/me
+    const meNewPassRes = await fetch(`${baseUrl}/auth/me`, {
+      headers: { Authorization: `Bearer ${newPassLoginData.data.session.accessToken}` }
+    });
+    assert(meNewPassRes.status === 200, '3.6 GET /auth/me succeeds after login with new password');
 
     // =========================================================================
     // FLOW 4: VERIFY MAGIC LINK IS REMOVED

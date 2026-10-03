@@ -3,6 +3,7 @@ import { AppError } from '../utils/appError.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { invalidateAuthCache } from '../middleware/auth.js';
+import { ensureUserProfile } from '../utils/profileHelper.js';
 
 export class AuthService {
   /**
@@ -99,14 +100,10 @@ export class AuthService {
       throw AppError.unauthorized('Invalid email address or password');
     }
 
-    // Fetch user profile
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
+    // Fetch or safely auto-heal user profile
+    const profile = await ensureUserProfile(authData.user);
 
-    if (profileErr || !profile) {
+    if (!profile) {
       throw AppError.unauthorized('User profile not found. Please contact support.');
     }
 
@@ -213,39 +210,8 @@ export class AuthService {
     const userId = user.id;
     const email = user.email;
 
-    // Fetch existing profile if available
-    let { data: profile, error: fetchErr } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (!profile) {
-      logger.info('No profile found during code exchange. Creating new profile...', { userId, email });
-
-      const userMeta = user.user_metadata || {};
-      const firstName = userMeta.given_name || userMeta.first_name || userMeta.name || email.split('@')[0];
-      const lastName = userMeta.family_name || userMeta.last_name || '';
-
-      const { data: createdProfile, error: profileErr } = await supabaseAdmin
-        .from('profiles')
-        .insert({
-          id: userId,
-          first_name: firstName,
-          last_name: lastName || null,
-          email,
-          phone: '',
-          role: 'CUSTOMER'
-        })
-        .select()
-        .single();
-
-      if (profileErr) {
-        logger.error('Failed to create user profile during OAuth exchange', { error: profileErr.message });
-      } else {
-        profile = createdProfile;
-      }
-    }
+    // Fetch or safely auto-heal user profile
+    const profile = await ensureUserProfile(user);
 
     return {
       user: {
@@ -300,12 +266,8 @@ export class AuthService {
       throw AppError.badRequest(error?.message || 'Invalid or expired verification code');
     }
 
-    // Fetch user profile
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
+    // Fetch or safely auto-heal user profile
+    const profile = await ensureUserProfile(data.user);
 
     return {
       user: {
